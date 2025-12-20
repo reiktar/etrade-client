@@ -21,9 +21,19 @@ class BaseAPI:
     error handling, and response parsing.
     """
 
-    def __init__(self, config: ETradeConfig, auth: ETradeAuth) -> None:
+    def __init__(
+        self,
+        config: ETradeConfig,
+        auth: ETradeAuth,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
         self.config = config
         self.auth = auth
+        self._http_client = http_client
+
+    def set_http_client(self, http_client: httpx.AsyncClient | None) -> None:
+        """Set the shared HTTP client for connection pooling."""
+        self._http_client = http_client
 
     async def _request(
         self,
@@ -65,16 +75,27 @@ class BaseAPI:
         logger.debug("Request: %s %s", method, url)
         logger.debug("Params: %s", query_params)
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.request(
+        if self._http_client is not None:
+            # Use shared connection pool
+            response = await self._http_client.request(
                 method,
                 url,
                 params=query_params if query_params else None,
                 json=json_body,
                 headers=headers,
             )
+        else:
+            # Fallback: create per-request client (no pooling)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.request(
+                    method,
+                    url,
+                    params=query_params if query_params else None,
+                    json=json_body,
+                    headers=headers,
+                )
 
-            return self._handle_response(response)
+        return self._handle_response(response)
 
     def _handle_response(self, response: httpx.Response) -> dict[str, Any]:
         """Handle API response, raising appropriate errors."""
