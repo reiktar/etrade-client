@@ -40,7 +40,8 @@ from etrade_client.builders import (
     OptionType,
     OrderAction,
     OrderTerm,
-    PriceType,
+    OrderType,
+    PriceType,  # Backwards compatibility alias for OrderType
 )
 from etrade_client.client import ETradeClient
 from etrade_client.config import ETradeConfig
@@ -59,12 +60,13 @@ __all__ = [
     # Builders
     "EquityOrderBuilder",
     "OptionOrderBuilder",
-    # Enums
+    # Enums (commonly used)
     "MarketSession",
     "OptionType",
     "OrderAction",
     "OrderTerm",
-    "PriceType",
+    "OrderType",
+    "PriceType",  # Backwards compatibility alias for OrderType
     # Main client
     "ETradeClient",
     "ETradeConfig",

@@ -1,8 +1,24 @@
 """Alert-related models."""
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
+
+
+class AlertStatus(StrEnum):
+    """Alert status values."""
+
+    READ = "READ"
+    UNREAD = "UNREAD"
+    DELETED = "DELETED"
+
+
+class AlertCategory(StrEnum):
+    """Alert category values."""
+
+    STOCK = "STOCK"
+    ACCOUNT = "ACCOUNT"
 
 
 class Alert(BaseModel):
@@ -11,7 +27,7 @@ class Alert(BaseModel):
     alert_id: int = Field(alias="id")
     create_time: datetime = Field(alias="createTime")
     subject: str
-    status: str  # READ, UNREAD, DELETED
+    status: AlertStatus
 
     model_config = {"populate_by_name": True}
 

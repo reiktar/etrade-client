@@ -18,6 +18,14 @@ class QuoteStatus(StrEnum):
     EH_CLOSED = "EH_CLOSED"
 
 
+class OptionExpiryType(StrEnum):
+    """Option expiration type values."""
+
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+    QUARTERLY = "QUARTERLY"
+
+
 class AllQuoteDetails(BaseModel):
     """Detailed quote information."""
 
@@ -65,7 +73,7 @@ class Quote(BaseModel):
     """Stock quote with all available data."""
 
     symbol: str
-    quote_status: str | None = Field(default=None, alias="quoteStatus")
+    quote_status: QuoteStatus | None = Field(default=None, alias="quoteStatus")
     date_time: str | None = Field(default=None, alias="dateTime")
     all_data: AllQuoteDetails | None = Field(default=None, alias="All")
 
@@ -117,7 +125,7 @@ class OptionDetails(BaseModel):
     """Individual option contract details."""
 
     symbol: str = Field(alias="optionSymbol")
-    option_type: str = Field(alias="optionType")
+    option_type: OptionType = Field(alias="optionType")
     strike_price: Decimal = Field(alias="strikePrice")
     expiry_date: date = Field(alias="expiryDate")
     bid: Decimal | None = Field(default=None)
@@ -172,7 +180,7 @@ class OptionExpireDate(BaseModel):
     """Available expiration date for options."""
 
     expiry_date: date = Field(alias="expiryDate")
-    expiry_type: str | None = Field(default=None, alias="expiryType")  # WEEKLY, MONTHLY, QUARTERLY
+    expiry_type: OptionExpiryType | None = Field(default=None, alias="expiryType")
 
     model_config = {"populate_by_name": True}
 

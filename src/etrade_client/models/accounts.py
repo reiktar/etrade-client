@@ -27,6 +27,13 @@ class AccountStatus(StrEnum):
     CLOSED = "CLOSED"
 
 
+class PositionType(StrEnum):
+    """Position type values."""
+
+    LONG = "LONG"
+    SHORT = "SHORT"
+
+
 class Account(BaseModel):
     """E*Trade account information."""
 
@@ -159,7 +166,7 @@ class PortfolioPosition(BaseModel):
     total_gain_pct: Decimal = Field(alias="totalGainPct")
     days_gain: Decimal | None = Field(default=None, alias="daysGain")
     days_gain_pct: Decimal | None = Field(default=None, alias="daysGainPct")
-    position_type: str = Field(alias="positionType")  # LONG or SHORT
+    position_type: PositionType = Field(alias="positionType")
     quick: PositionQuick | None = Field(default=None, alias="Quick")
     date_acquired: datetime | None = Field(default=None, alias="dateAcquired")
 

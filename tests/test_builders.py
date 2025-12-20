@@ -278,7 +278,9 @@ class TestEnums:
         assert OrderTerm.GOOD_UNTIL_CANCEL.value == "GOOD_UNTIL_CANCEL"
 
     def test_enums_are_str(self) -> None:
-        """Enums should be usable as strings."""
-        # str(Enum) pattern allows direct use in API calls
-        assert str(OrderAction.BUY) == "OrderAction.BUY"
+        """Enums should be usable as strings (StrEnum behavior)."""
+        # StrEnum returns the value directly when converted to str
+        assert str(OrderAction.BUY) == "BUY"
         assert OrderAction.BUY.value == "BUY"
+        # Can be used directly in string contexts
+        assert f"{OrderAction.BUY}" == "BUY"

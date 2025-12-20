@@ -1,56 +1,18 @@
 """Type-safe order builders for E*Trade API."""
 
 import secrets
-from enum import Enum
 from typing import Any
 
+from etrade_client.models.market import OptionType
+from etrade_client.models.orders import (
+    MarketSession,
+    OrderAction,
+    OrderTerm,
+    OrderType,
+)
 
-class OrderAction(str, Enum):
-    """Order action types."""
-
-    # Equity actions
-    BUY = "BUY"
-    SELL = "SELL"
-    BUY_TO_COVER = "BUY_TO_COVER"
-    SELL_SHORT = "SELL_SHORT"
-
-    # Option actions
-    BUY_OPEN = "BUY_OPEN"
-    SELL_OPEN = "SELL_OPEN"
-    BUY_CLOSE = "BUY_CLOSE"
-    SELL_CLOSE = "SELL_CLOSE"
-
-
-class PriceType(str, Enum):
-    """Order price types."""
-
-    MARKET = "MARKET"
-    LIMIT = "LIMIT"
-    STOP = "STOP"
-    STOP_LIMIT = "STOP_LIMIT"
-
-
-class OrderTerm(str, Enum):
-    """Order duration/term."""
-
-    GOOD_FOR_DAY = "GOOD_FOR_DAY"
-    GOOD_UNTIL_CANCEL = "GOOD_UNTIL_CANCEL"
-    IMMEDIATE_OR_CANCEL = "IMMEDIATE_OR_CANCEL"
-    FILL_OR_KILL = "FILL_OR_KILL"
-
-
-class MarketSession(str, Enum):
-    """Market session for order execution."""
-
-    REGULAR = "REGULAR"
-    EXTENDED = "EXTENDED"
-
-
-class OptionType(str, Enum):
-    """Option contract type."""
-
-    CALL = "CALL"
-    PUT = "PUT"
+# Backwards compatibility alias - PriceType was the original name in builders
+PriceType = OrderType
 
 
 class EquityOrderBuilder:

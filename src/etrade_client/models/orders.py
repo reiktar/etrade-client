@@ -71,12 +71,19 @@ class SecurityType(StrEnum):
     MMF = "MMF"  # Money Market Fund
 
 
+class CallPut(StrEnum):
+    """Call or Put indicator for options."""
+
+    CALL = "CALL"
+    PUT = "PUT"
+
+
 class OrderProduct(BaseModel):
     """Product in an order."""
 
     symbol: str
-    security_type: str = Field(alias="securityType")
-    call_put: str | None = Field(default=None, alias="callPut")  # CALL or PUT
+    security_type: SecurityType = Field(alias="securityType")
+    call_put: CallPut | None = Field(default=None, alias="callPut")
     expiry_year: int | None = Field(default=None, alias="expiryYear")
     expiry_month: int | None = Field(default=None, alias="expiryMonth")
     expiry_day: int | None = Field(default=None, alias="expiryDay")
@@ -89,7 +96,7 @@ class OrderInstrument(BaseModel):
     """Instrument/leg of an order."""
 
     product: OrderProduct = Field(alias="Product")
-    order_action: str = Field(alias="orderAction")
+    order_action: OrderAction = Field(alias="orderAction")
     quantity: int = Field(alias="orderedQuantity")
     filled_quantity: int | None = Field(default=None, alias="filledQuantity")
     average_execution_price: Decimal | None = Field(default=None, alias="averageExecutionPrice")
@@ -108,16 +115,16 @@ class OrderDetail(BaseModel):
     executed_time: datetime | None = Field(default=None, alias="executedTime")
 
     # Order configuration
-    order_type: str = Field(alias="priceType")
-    order_term: str = Field(alias="orderTerm")
-    market_session: str = Field(alias="marketSession")
+    order_type: OrderType = Field(alias="priceType")
+    order_term: OrderTerm = Field(alias="orderTerm")
+    market_session: MarketSession = Field(alias="marketSession")
 
     # Pricing
     limit_price: Decimal | None = Field(default=None, alias="limitPrice")
     stop_price: Decimal | None = Field(default=None, alias="stopPrice")
 
     # Status
-    status: str
+    status: OrderStatus
     order_value: Decimal | None = Field(default=None, alias="orderValue")
     estimated_total_amount: Decimal | None = Field(default=None, alias="estimatedTotalAmount")
 
