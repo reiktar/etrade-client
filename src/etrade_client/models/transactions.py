@@ -1,12 +1,9 @@
 """Transaction-related models."""
 
-from typing import TYPE_CHECKING
+from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    from datetime import datetime
-    from decimal import Decimal
 
 
 class TransactionProduct(BaseModel):
@@ -54,8 +51,15 @@ class Transaction(BaseModel):
     @property
     def symbol(self) -> str | None:
         """Get the symbol from the transaction."""
-        if self.brokerage and self.brokerage.product:
-            return self.brokerage.product.symbol or self.brokerage.display_symbol
+        if self.brokerage:
+            sym = None
+            if self.brokerage.product:
+                sym = self.brokerage.product.symbol
+            if not sym:
+                sym = self.brokerage.display_symbol
+            # Return None for empty/whitespace-only symbols
+            if sym and sym.strip():
+                return sym.strip()
         return None
 
 
@@ -64,7 +68,13 @@ class TransactionListResponse(BaseModel):
 
     transactions: list[Transaction] = Field(default_factory=list)
     marker: str | None = Field(default=None)
+    next_page: str | None = Field(default=None)
     more_transactions: bool = Field(default=False)
+
+    @property
+    def has_more(self) -> bool:
+        """Check if there are more pages to fetch."""
+        return bool(self.next_page)
 
     @classmethod
     def from_api_response(cls, data: dict) -> TransactionListResponse:
@@ -78,5 +88,6 @@ class TransactionListResponse(BaseModel):
         return cls(
             transactions=[Transaction.model_validate(t) for t in tx_list],
             marker=tx_response.get("marker"),
+            next_page=tx_response.get("next"),
             more_transactions=tx_response.get("moreTransactions", False),
         )

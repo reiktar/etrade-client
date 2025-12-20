@@ -1,5 +1,6 @@
 """Base API client with common functionality."""
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -9,6 +10,8 @@ from etrade_client.exceptions import ETradeAPIError, ETradeRateLimitError
 if TYPE_CHECKING:
     from etrade_client.auth import ETradeAuth
     from etrade_client.config import ETradeConfig
+
+logger = logging.getLogger(__name__)
 
 
 class BaseAPI:
@@ -59,7 +62,10 @@ class BaseAPI:
         if json_body:
             headers["Content-Type"] = "application/json"
 
-        async with httpx.AsyncClient() as client:
+        logger.debug("Request: %s %s", method, url)
+        logger.debug("Params: %s", query_params)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.request(
                 method,
                 url,

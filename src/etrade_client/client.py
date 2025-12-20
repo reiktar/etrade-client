@@ -1,6 +1,7 @@
 """Main E*Trade client."""
 
 from etrade_client.api.accounts import AccountsAPI
+from etrade_client.api.alerts import AlertsAPI
 from etrade_client.api.market import MarketAPI
 from etrade_client.api.orders import OrdersAPI
 from etrade_client.auth import ETradeAuth, TokenStore
@@ -50,6 +51,7 @@ class ETradeClient:
 
         # Initialize API modules
         self.accounts = AccountsAPI(config, self.auth)
+        self.alerts = AlertsAPI(config, self.auth)
         self.market = MarketAPI(config, self.auth)
         self.orders = OrdersAPI(config, self.auth)
 

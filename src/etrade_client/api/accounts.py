@@ -26,7 +26,7 @@ class AccountsAPI(BaseAPI):
         Returns:
             AccountListResponse with list of accounts
         """
-        data = await self._get("/accounts/list")
+        data = await self._get("/accounts/list.json")
         return AccountListResponse.from_api_response(data)
 
     async def get_balance(
@@ -53,7 +53,7 @@ class AccountsAPI(BaseAPI):
         if account_type:
             params["accountType"] = account_type
 
-        data = await self._get(f"/accounts/{account_id_key}/balance", params=params)
+        data = await self._get(f"/accounts/{account_id_key}/balance.json", params=params)
         return BalanceResponse.from_api_response(data)
 
     async def get_portfolio(
@@ -97,7 +97,7 @@ class AccountsAPI(BaseAPI):
         if market_session:
             params["marketSession"] = market_session
 
-        data = await self._get(f"/accounts/{account_id_key}/portfolio", params=params)
+        data = await self._get(f"/accounts/{account_id_key}/portfolio.json", params=params)
         return PortfolioResponse.from_api_response(data, account_id_key)
 
     async def list_transactions(
@@ -106,6 +106,7 @@ class AccountsAPI(BaseAPI):
         *,
         start_date: date | None = None,
         end_date: date | None = None,
+        sort_order: str = "DESC",
         marker: str | None = None,
         count: int = 50,
     ) -> TransactionListResponse:
@@ -115,13 +116,17 @@ class AccountsAPI(BaseAPI):
             account_id_key: The account ID key
             start_date: Start date for transaction range
             end_date: End date for transaction range
+            sort_order: Sort order ("ASC" or "DESC", default: DESC)
             marker: Pagination marker from previous response
             count: Number of transactions to return (max 50)
 
         Returns:
             TransactionListResponse with transactions
         """
-        params: dict = {"count": min(count, 50)}
+        params: dict = {
+            "count": min(count, 50),
+            "sortOrder": sort_order,
+        }
 
         if start_date:
             params["startDate"] = start_date.strftime("%m%d%Y")
@@ -130,5 +135,5 @@ class AccountsAPI(BaseAPI):
         if marker:
             params["marker"] = marker
 
-        data = await self._get(f"/accounts/{account_id_key}/transactions", params=params)
+        data = await self._get(f"/accounts/{account_id_key}/transactions.json", params=params)
         return TransactionListResponse.from_api_response(data)
