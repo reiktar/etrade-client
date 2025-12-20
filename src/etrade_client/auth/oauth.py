@@ -93,10 +93,11 @@ class ETradeAuth:
         self._request_token = token
         self._request_token_secret = token_secret
 
-        # Build authorization URL
+        # Build authorization URL (always uses us.etrade.com, token must be URL-encoded)
+        encoded_token = quote(token, safe="")
         auth_url = (
-            f"{self.config.base_url}/e/t/etws/authorize"
-            f"?key={self.config.consumer_key}&token={token}"
+            f"https://us.etrade.com/e/t/etws/authorize"
+            f"?key={self.config.consumer_key}&token={encoded_token}"
         )
 
         return RequestToken(
