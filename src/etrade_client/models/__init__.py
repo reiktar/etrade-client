@@ -18,17 +18,16 @@ from etrade_client.models.orders import (
     OrderPreviewResponse,
     PlaceOrderResponse,
 )
+from etrade_client.models.transactions import Transaction, TransactionListResponse
 
 __all__ = [
     "AccessToken",
-    # Accounts
     "Account",
     "AccountBalance",
     "AccountListResponse",
     "BalanceResponse",
     "OptionChain",
     "OptionExpireDate",
-    # Orders
     "Order",
     "OrderDetail",
     "OrderListResponse",
@@ -37,9 +36,9 @@ __all__ = [
     "PlaceOrderResponse",
     "PortfolioPosition",
     "PortfolioResponse",
-    # Market
     "Quote",
     "QuoteResponse",
-    # Auth
     "RequestToken",
+    "Transaction",
+    "TransactionListResponse",
 ]

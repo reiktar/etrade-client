@@ -1,11 +1,17 @@
 """Accounts API endpoints."""
 
+from typing import TYPE_CHECKING
+
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.accounts import (
     AccountListResponse,
     BalanceResponse,
     PortfolioResponse,
 )
+from etrade_client.models.transactions import TransactionListResponse
+
+if TYPE_CHECKING:
+    from datetime import date
 
 
 class AccountsAPI(BaseAPI):
@@ -93,3 +99,36 @@ class AccountsAPI(BaseAPI):
 
         data = await self._get(f"/accounts/{account_id_key}/portfolio", params=params)
         return PortfolioResponse.from_api_response(data, account_id_key)
+
+    async def list_transactions(
+        self,
+        account_id_key: str,
+        *,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        marker: str | None = None,
+        count: int = 50,
+    ) -> TransactionListResponse:
+        """List transactions for an account.
+
+        Args:
+            account_id_key: The account ID key
+            start_date: Start date for transaction range
+            end_date: End date for transaction range
+            marker: Pagination marker from previous response
+            count: Number of transactions to return (max 50)
+
+        Returns:
+            TransactionListResponse with transactions
+        """
+        params: dict = {"count": min(count, 50)}
+
+        if start_date:
+            params["startDate"] = start_date.strftime("%m%d%Y")
+        if end_date:
+            params["endDate"] = end_date.strftime("%m%d%Y")
+        if marker:
+            params["marker"] = marker
+
+        data = await self._get(f"/accounts/{account_id_key}/transactions", params=params)
+        return TransactionListResponse.from_api_response(data)
