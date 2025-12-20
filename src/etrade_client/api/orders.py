@@ -1,17 +1,17 @@
 """Orders API endpoints."""
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator
+from datetime import date
+from typing import Any
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.exceptions import ETradeValidationError
 from etrade_client.models.orders import (
+    Order,
     OrderListResponse,
     OrderPreviewResponse,
     PlaceOrderResponse,
 )
-
-if TYPE_CHECKING:
-    from datetime import date
 
 
 class OrdersAPI(BaseAPI):
@@ -72,8 +72,97 @@ class OrdersAPI(BaseAPI):
         if market_session:
             params["marketSession"] = market_session
 
-        data = await self._get(f"/accounts/{account_id_key}/orders", params=params)
+        data = await self._get(f"/accounts/{account_id_key}/orders.json", params=params)
         return OrderListResponse.from_api_response(data)
+
+    async def _iter_order_pages(
+        self,
+        account_id_key: str,
+        *,
+        count: int = 25,
+        status: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        symbol: str | None = None,
+        security_type: str | None = None,
+        transaction_type: str | None = None,
+        market_session: str | None = None,
+    ) -> AsyncIterator[OrderListResponse]:
+        """Internal: iterate over order pages.
+
+        Yields pages lazily - next API call only happens when consumer iterates.
+        """
+        marker = None
+        while True:
+            page = await self.list_orders(
+                account_id_key,
+                marker=marker,
+                count=count,
+                status=status,
+                from_date=from_date,
+                to_date=to_date,
+                symbol=symbol,
+                security_type=security_type,
+                transaction_type=transaction_type,
+                market_session=market_session,
+            )
+            yield page
+
+            if not page.has_more or not page.marker:
+                break
+            marker = page.marker
+
+    async def iter_orders(
+        self,
+        account_id_key: str,
+        *,
+        count: int = 25,
+        status: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        symbol: str | None = None,
+        security_type: str | None = None,
+        transaction_type: str | None = None,
+        market_session: str | None = None,
+        limit: int | None = None,
+    ) -> AsyncIterator[Order]:
+        """Iterate over orders matching the filters.
+
+        Yields individual orders lazily. Next page is only fetched
+        when the consumer continues iterating.
+
+        Args:
+            account_id_key: Account ID key
+            count: Page size for API calls (max 100)
+            status: Filter by order status
+            from_date: Start date filter
+            to_date: End date filter
+            symbol: Filter by symbol
+            security_type: Filter by security type
+            transaction_type: Filter by transaction type
+            market_session: Filter by market session
+            limit: Maximum orders to yield (None = unlimited)
+
+        Yields:
+            Individual Order objects
+        """
+        yielded = 0
+        async for page in self._iter_order_pages(
+            account_id_key,
+            count=count,
+            status=status,
+            from_date=from_date,
+            to_date=to_date,
+            symbol=symbol,
+            security_type=security_type,
+            transaction_type=transaction_type,
+            market_session=market_session,
+        ):
+            for order in page.orders:
+                if limit is not None and yielded >= limit:
+                    return
+                yield order
+                yielded += 1
 
     async def preview_order(
         self,

@@ -169,7 +169,13 @@ class OrderListResponse(BaseModel):
     """Response from list orders endpoint."""
 
     orders: list[Order] = Field(default_factory=list)
-    marker: str | None = Field(default=None)  # For pagination
+    marker: str | None = Field(default=None)
+    next_page: str | None = Field(default=None)
+
+    @property
+    def has_more(self) -> bool:
+        """Check if there are more pages to fetch."""
+        return bool(self.next_page or self.marker)
 
     @classmethod
     def from_api_response(cls, data: dict) -> OrderListResponse:
@@ -183,6 +189,7 @@ class OrderListResponse(BaseModel):
         return cls(
             orders=[Order.model_validate(o) for o in order_list],
             marker=orders_response.get("marker"),
+            next_page=orders_response.get("next"),
         )
 
 

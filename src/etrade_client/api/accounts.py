@@ -1,6 +1,7 @@
 """Accounts API endpoints."""
 
-from typing import TYPE_CHECKING
+from collections.abc import AsyncIterator
+from datetime import date
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.accounts import (
@@ -8,10 +9,7 @@ from etrade_client.models.accounts import (
     BalanceResponse,
     PortfolioResponse,
 )
-from etrade_client.models.transactions import TransactionListResponse
-
-if TYPE_CHECKING:
-    from datetime import date
+from etrade_client.models.transactions import Transaction, TransactionListResponse
 
 
 class AccountsAPI(BaseAPI):
@@ -137,3 +135,72 @@ class AccountsAPI(BaseAPI):
 
         data = await self._get(f"/accounts/{account_id_key}/transactions.json", params=params)
         return TransactionListResponse.from_api_response(data)
+
+    async def _iter_transaction_pages(
+        self,
+        account_id_key: str,
+        *,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        sort_order: str = "DESC",
+        count: int = 50,
+    ) -> AsyncIterator[TransactionListResponse]:
+        """Internal: iterate over transaction pages.
+
+        Yields pages lazily - next API call only happens when consumer iterates.
+        """
+        marker = None
+        while True:
+            page = await self.list_transactions(
+                account_id_key,
+                start_date=start_date,
+                end_date=end_date,
+                sort_order=sort_order,
+                marker=marker,
+                count=count,
+            )
+            yield page
+
+            if not page.has_more or not page.marker:
+                break
+            marker = page.marker
+
+    async def iter_transactions(
+        self,
+        account_id_key: str,
+        *,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        sort_order: str = "DESC",
+        count: int = 50,
+        limit: int | None = None,
+    ) -> AsyncIterator[Transaction]:
+        """Iterate over transactions matching the filters.
+
+        Yields individual transactions lazily. Next page is only fetched
+        when the consumer continues iterating.
+
+        Args:
+            account_id_key: The account ID key
+            start_date: Start date for transaction range
+            end_date: End date for transaction range
+            sort_order: Sort order ("ASC" or "DESC", default: DESC)
+            count: Page size for API calls (max 50)
+            limit: Maximum transactions to yield (None = unlimited)
+
+        Yields:
+            Individual Transaction objects
+        """
+        yielded = 0
+        async for page in self._iter_transaction_pages(
+            account_id_key,
+            start_date=start_date,
+            end_date=end_date,
+            sort_order=sort_order,
+            count=count,
+        ):
+            for tx in page.transactions:
+                if limit is not None and yielded >= limit:
+                    return
+                yield tx
+                yielded += 1
