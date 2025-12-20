@@ -36,6 +36,8 @@ class AlertListResponse(BaseModel):
     alerts: list[Alert] = Field(default_factory=list)
     total_alerts: int = Field(default=0, alias="totalAlerts")
 
+    model_config = {"populate_by_name": True}
+
     @classmethod
     def from_api_response(cls, data: dict) -> "AlertListResponse":
         """Parse from raw API response."""
