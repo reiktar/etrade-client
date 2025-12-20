@@ -33,6 +33,15 @@ Example:
     orders = await client.orders.list_orders(accounts.accounts[0].account_id_key)
 """
 
+from etrade_client.builders import (
+    EquityOrderBuilder,
+    MarketSession,
+    OptionOrderBuilder,
+    OptionType,
+    OrderAction,
+    OrderTerm,
+    PriceType,
+)
 from etrade_client.client import ETradeClient
 from etrade_client.config import ETradeConfig
 from etrade_client.exceptions import (
@@ -47,12 +56,21 @@ from etrade_client.exceptions import (
 __version__ = "0.1.0"
 
 __all__ = [
-    "ETradeAPIError",
-    "ETradeAuthError",
+    # Builders
+    "EquityOrderBuilder",
+    "OptionOrderBuilder",
+    # Enums
+    "MarketSession",
+    "OptionType",
+    "OrderAction",
+    "OrderTerm",
+    "PriceType",
     # Main client
     "ETradeClient",
     "ETradeConfig",
     # Exceptions
+    "ETradeAPIError",
+    "ETradeAuthError",
     "ETradeError",
     "ETradeRateLimitError",
     "ETradeTokenError",
