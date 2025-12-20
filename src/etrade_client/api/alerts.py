@@ -1,7 +1,10 @@
 """Alerts API endpoints."""
 
+from collections.abc import AsyncIterator
+
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.alerts import (
+    Alert,
     AlertDetailResponse,
     AlertListResponse,
     DeleteAlertsResponse,
@@ -80,3 +83,46 @@ class AlertsAPI(BaseAPI):
         id_list = ",".join(str(id) for id in alert_ids)
         data = await self._delete(f"/user/alerts/{id_list}.json")
         return DeleteAlertsResponse.from_api_response(data)
+
+    async def iter_alerts(
+        self,
+        *,
+        category: str | None = None,
+        status: str | None = None,
+        direction: str = "DESC",
+        search: str | None = None,
+        limit: int | None = None,
+    ) -> AsyncIterator[Alert]:
+        """Iterate over alerts matching the filters.
+
+        Yields individual alerts. Provides a consistent interface with
+        iter_transactions() and iter_orders().
+
+        Note: The E*Trade Alerts API returns up to 300 alerts in a single
+        call with no pagination. This method provides interface consistency.
+
+        Args:
+            category: Filter by category - "STOCK" or "ACCOUNT"
+            status: Filter by status - "READ", "UNREAD", or "DELETED"
+            direction: Sort direction by createDate - "ASC" or "DESC"
+            search: Search string to filter by subject text
+            limit: Maximum alerts to yield (None = unlimited)
+
+        Yields:
+            Individual Alert objects
+        """
+        # Fetch all alerts (API returns up to 300, no pagination)
+        response = await self.list_alerts(
+            count=300,
+            category=category,
+            status=status,
+            direction=direction,
+            search=search,
+        )
+
+        yielded = 0
+        for alert in response.alerts:
+            if limit is not None and yielded >= limit:
+                return
+            yield alert
+            yielded += 1
