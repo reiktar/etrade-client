@@ -4,6 +4,13 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from tenacity import (
+    RetryCallState,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from etrade_client.exceptions import ETradeAPIError, ETradeRateLimitError
 
@@ -12,6 +19,26 @@ if TYPE_CHECKING:
     from etrade_client.config import ETradeConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _wait_for_rate_limit(retry_state: RetryCallState) -> float:
+    """Custom wait strategy that respects Retry-After header.
+
+    If the exception has a retry_after value, use it.
+    Otherwise, fall back to exponential backoff.
+    """
+    exception = retry_state.outcome.exception() if retry_state.outcome else None
+
+    if isinstance(exception, ETradeRateLimitError) and exception.retry_after:
+        wait_time = float(exception.retry_after)
+        logger.info("Rate limited, waiting %s seconds (from Retry-After header)", wait_time)
+        return wait_time
+
+    # Exponential backoff: 2, 4, 8, 16... capped at 60 seconds
+    exp_wait = wait_exponential(multiplier=1, min=2, max=60)
+    wait_time = exp_wait(retry_state)
+    logger.info("Rate limited, waiting %.1f seconds (exponential backoff)", wait_time)
+    return wait_time
 
 
 class BaseAPI:
@@ -35,6 +62,12 @@ class BaseAPI:
         """Set the shared HTTP client for connection pooling."""
         self._http_client = http_client
 
+    @retry(
+        retry=retry_if_exception_type(ETradeRateLimitError),
+        wait=_wait_for_rate_limit,
+        stop=stop_after_attempt(5),
+        reraise=True,
+    )
     async def _request(
         self,
         method: str,
@@ -44,6 +77,9 @@ class BaseAPI:
         json_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Make an authenticated API request.
+
+        Automatically retries on rate limit (429) with exponential backoff,
+        respecting Retry-After header when provided.
 
         Args:
             method: HTTP method
@@ -56,7 +92,7 @@ class BaseAPI:
 
         Raises:
             ETradeAPIError: On API error
-            ETradeRateLimitError: On rate limit (429)
+            ETradeRateLimitError: On rate limit (429) after max retries
         """
         url = f"{self.config.api_base_url}{endpoint}"
 
