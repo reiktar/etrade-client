@@ -450,3 +450,202 @@ class FieldAnalysisCollector:
                 by_model.setdefault(model_hint, []).append(f.path)
 
         return {k: sorted(set(v)) for k, v in by_model.items()}
+
+
+# =============================================================================
+# Field Presence Analysis (for nullability detection)
+# =============================================================================
+
+
+@dataclass
+class FieldPresenceStats:
+    """Statistics about a field's presence in API responses."""
+
+    field_path: str  # e.g., "Account.accountId"
+    model_name: str  # e.g., "Account"
+    field_name: str  # e.g., "accountId"
+    times_present: int = 0
+    times_absent: int = 0
+    sample_values: list[Any] = field(default_factory=list)
+
+    @property
+    def total_observations(self) -> int:
+        return self.times_present + self.times_absent
+
+    @property
+    def presence_rate(self) -> float:
+        if self.total_observations == 0:
+            return 0.0
+        return self.times_present / self.total_observations
+
+    @property
+    def is_always_present(self) -> bool:
+        return self.times_absent == 0 and self.times_present > 0
+
+    @property
+    def is_never_present(self) -> bool:
+        return self.times_present == 0 and self.times_absent > 0
+
+    @property
+    def is_sometimes_present(self) -> bool:
+        return self.times_present > 0 and self.times_absent > 0
+
+
+class FieldPresenceAnalyzer:
+    """Analyzes field presence across multiple API responses.
+
+    Tracks which fields are always present, sometimes present, or never present
+    to help determine true nullability of model fields.
+    """
+
+    def __init__(self) -> None:
+        self._stats: dict[str, FieldPresenceStats] = {}
+        self._model_observations: dict[str, int] = {}
+
+    def analyze_model(
+        self,
+        raw_json: dict[str, Any],
+        model_class: type[BaseModel],
+        model_name: str | None = None,
+    ) -> None:
+        """Analyze which fields are present in the raw JSON for a model.
+
+        Args:
+            raw_json: The raw JSON data from the API
+            model_class: The Pydantic model class to analyze against
+            model_name: Optional name for the model (defaults to class name)
+        """
+        if model_name is None:
+            model_name = model_class.__name__
+
+        self._model_observations[model_name] = (
+            self._model_observations.get(model_name, 0) + 1
+        )
+
+        # Get all field names and their aliases
+        for field_name, field_info in model_class.model_fields.items():
+            # Check both field name and alias
+            keys_to_check = [field_name]
+            if field_info.alias:
+                keys_to_check.append(field_info.alias)
+
+            field_path = f"{model_name}.{field_name}"
+
+            if field_path not in self._stats:
+                self._stats[field_path] = FieldPresenceStats(
+                    field_path=field_path,
+                    model_name=model_name,
+                    field_name=field_name,
+                )
+
+            stats = self._stats[field_path]
+
+            # Check if field is present in raw JSON
+            is_present = any(key in raw_json for key in keys_to_check)
+
+            if is_present:
+                stats.times_present += 1
+                # Store sample value (limit to 3)
+                for key in keys_to_check:
+                    if key in raw_json and len(stats.sample_values) < 3:
+                        value = raw_json[key]
+                        # Truncate long values
+                        if isinstance(value, str) and len(value) > 50:
+                            value = value[:50] + "..."
+                        elif isinstance(value, (dict, list)):
+                            value = f"<{type(value).__name__}>"
+                        stats.sample_values.append(value)
+                        break
+            else:
+                stats.times_absent += 1
+
+    def get_always_present_fields(self, model_name: str | None = None) -> list[FieldPresenceStats]:
+        """Get fields that are always present in API responses."""
+        stats = self._stats.values()
+        if model_name:
+            stats = [s for s in stats if s.model_name == model_name]
+        return sorted(
+            [s for s in stats if s.is_always_present],
+            key=lambda x: x.field_path,
+        )
+
+    def get_sometimes_present_fields(self, model_name: str | None = None) -> list[FieldPresenceStats]:
+        """Get fields that are sometimes present in API responses."""
+        stats = self._stats.values()
+        if model_name:
+            stats = [s for s in stats if s.model_name == model_name]
+        return sorted(
+            [s for s in stats if s.is_sometimes_present],
+            key=lambda x: x.field_path,
+        )
+
+    def get_never_present_fields(self, model_name: str | None = None) -> list[FieldPresenceStats]:
+        """Get fields that are never present in API responses."""
+        stats = self._stats.values()
+        if model_name:
+            stats = [s for s in stats if s.model_name == model_name]
+        return sorted(
+            [s for s in stats if s.is_never_present],
+            key=lambda x: x.field_path,
+        )
+
+    def get_summary(self) -> str:
+        """Get a summary of field presence analysis."""
+        lines = ["FIELD PRESENCE ANALYSIS", "=" * 70, ""]
+
+        # Group by model
+        models = sorted(set(s.model_name for s in self._stats.values()))
+
+        for model_name in models:
+            obs_count = self._model_observations.get(model_name, 0)
+            lines.append(f"{model_name} ({obs_count} observations):")
+            lines.append("-" * 40)
+
+            always = self.get_always_present_fields(model_name)
+            sometimes = self.get_sometimes_present_fields(model_name)
+            never = self.get_never_present_fields(model_name)
+
+            if always:
+                lines.append(f"  ALWAYS PRESENT ({len(always)} fields) - should be required:")
+                for s in always:
+                    samples = ", ".join(str(v) for v in s.sample_values[:2])
+                    lines.append(f"    ✓ {s.field_name} (e.g., {samples})")
+
+            if sometimes:
+                lines.append(f"  SOMETIMES PRESENT ({len(sometimes)} fields) - truly optional:")
+                for s in sometimes:
+                    lines.append(
+                        f"    ? {s.field_name} ({s.times_present}/{s.total_observations} = "
+                        f"{s.presence_rate:.0%})"
+                    )
+
+            if never:
+                lines.append(f"  NEVER PRESENT ({len(never)} fields) - may be deprecated/context-specific:")
+                for s in never:
+                    lines.append(f"    ✗ {s.field_name}")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def get_nullability_recommendations(self) -> dict[str, dict[str, str]]:
+        """Get recommendations for field nullability.
+
+        Returns:
+            Dict mapping model_name -> field_name -> recommendation
+            Recommendations are: "required", "optional", "investigate"
+        """
+        recommendations: dict[str, dict[str, str]] = {}
+
+        for stats in self._stats.values():
+            if stats.model_name not in recommendations:
+                recommendations[stats.model_name] = {}
+
+            if stats.is_always_present:
+                recommendations[stats.model_name][stats.field_name] = "required"
+            elif stats.is_sometimes_present:
+                recommendations[stats.model_name][stats.field_name] = "optional"
+            elif stats.is_never_present:
+                recommendations[stats.model_name][stats.field_name] = "investigate"
+
+        return recommendations
