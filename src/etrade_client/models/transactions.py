@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -12,7 +13,7 @@ class TransactionProduct(BaseModel):
     symbol: str | None = Field(default=None)
     security_type: str | None = Field(default=None, alias="securityType")
     security_sub_type: str | None = Field(default=None, alias="securitySubType")
-    product_id: dict | None = Field(default=None, alias="productId")
+    product_id: dict[str, Any] | None = Field(default=None, alias="productId")
 
     model_config = {"populate_by_name": True}
 
@@ -52,7 +53,7 @@ class Transaction(BaseModel):
     description2: str | None = Field(default=None)
 
     # Context-specific (may not always be present)
-    category: dict | None = Field(default=None, alias="Category")
+    category: dict[str, Any] | None = Field(default=None, alias="Category")
 
     model_config = {"populate_by_name": True}
 
@@ -85,7 +86,7 @@ class TransactionListResponse(BaseModel):
         return bool(self.next_page)
 
     @classmethod
-    def from_api_response(cls, data: dict) -> TransactionListResponse:
+    def from_api_response(cls, data: dict[str, Any]) -> TransactionListResponse:
         """Parse from raw API response."""
         tx_response = data.get("TransactionListResponse", {})
         tx_list = tx_response.get("Transaction", [])

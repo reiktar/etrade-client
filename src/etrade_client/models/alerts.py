@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -55,7 +56,7 @@ class AlertListResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
     @classmethod
-    def from_api_response(cls, data: dict) -> "AlertListResponse":
+    def from_api_response(cls, data: dict[str, Any]) -> "AlertListResponse":
         """Parse from raw API response."""
         alert_response = data.get("AlertsResponse", {})
         alert_list = alert_response.get("Alert", [])
@@ -76,7 +77,7 @@ class AlertDetailResponse(BaseModel):
     alert: AlertDetail
 
     @classmethod
-    def from_api_response(cls, data: dict) -> "AlertDetailResponse":
+    def from_api_response(cls, data: dict[str, Any]) -> "AlertDetailResponse":
         """Parse from raw API response."""
         alert_data = data.get("AlertDetailsResponse", {})
         return cls(alert=AlertDetail.model_validate(alert_data))
@@ -88,7 +89,7 @@ class DeleteAlertsResponse(BaseModel):
     result: str  # SUCCESS or error message
 
     @classmethod
-    def from_api_response(cls, data: dict) -> "DeleteAlertsResponse":
+    def from_api_response(cls, data: dict[str, Any]) -> "DeleteAlertsResponse":
         """Parse from raw API response."""
         result = data.get("AlertsResponse", {}).get("result", "UNKNOWN")
         return cls(result=result)

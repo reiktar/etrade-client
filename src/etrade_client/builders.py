@@ -14,6 +14,19 @@ from etrade_client.models.orders import (
 # Backwards compatibility alias - PriceType was the original name in builders
 PriceType = OrderType
 
+__all__ = [
+    # Builders
+    "EquityOrderBuilder",
+    "OptionOrderBuilder",
+    # Re-exported enums
+    "MarketSession",
+    "OptionType",
+    "OrderAction",
+    "OrderTerm",
+    "OrderType",
+    "PriceType",
+]
+
 
 class EquityOrderBuilder:
     """Fluent builder for equity orders.

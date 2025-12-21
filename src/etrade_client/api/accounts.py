@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from datetime import date
+from typing import Any
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.accounts import (
@@ -81,7 +82,7 @@ class AccountsAPI(BaseAPI):
         Returns:
             PortfolioResponse with positions
         """
-        params = {
+        params: dict[str, Any] = {
             "totalsRequired": str(totals_required).lower(),
             "lotsRequired": str(lots_required).lower(),
             "view": view,
@@ -121,7 +122,7 @@ class AccountsAPI(BaseAPI):
         Returns:
             TransactionListResponse with transactions
         """
-        params: dict = {
+        params: dict[str, Any] = {
             "count": min(count, 50),
             "sortOrder": sort_order,
         }

@@ -3,6 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -122,7 +123,7 @@ class OrderProduct(BaseModel):
     expiry_month: int | None = Field(default=None, alias="expiryMonth")
     expiry_day: int | None = Field(default=None, alias="expiryDay")
     strike_price: Decimal | None = Field(default=None, alias="strikePrice")
-    product_id: dict | None = Field(default=None, alias="productId")
+    product_id: dict[str, Any] | None = Field(default=None, alias="productId")
 
     model_config = {"populate_by_name": True}
 
@@ -172,7 +173,7 @@ class OrderDetail(BaseModel):
     # Context-specific fields (may not always be present)
     account_id: str | None = Field(default=None, alias="accountId")
     estimated_total_amount: Decimal | None = Field(default=None, alias="estimatedTotalAmount")
-    messages: list[dict] | None = Field(default=None)
+    messages: list[dict[str, Any]] | None = Field(default=None)
 
     model_config = {"populate_by_name": True}
 
@@ -235,7 +236,7 @@ class OrderListResponse(BaseModel):
         return bool(self.next_page or self.marker)
 
     @classmethod
-    def from_api_response(cls, data: dict) -> OrderListResponse:
+    def from_api_response(cls, data: dict[str, Any]) -> OrderListResponse:
         """Parse from raw API response."""
         orders_response = data.get("OrdersResponse", {})
         order_list = orders_response.get("Order", [])
@@ -279,7 +280,7 @@ class OrderPreview(BaseModel):
     preview_ids: list[PreviewId] = Field(default_factory=list, alias="PreviewIds")
 
     # Order details
-    order: list[dict] = Field(default_factory=list, alias="Order")
+    order: list[dict[str, Any]] = Field(default_factory=list, alias="Order")
 
     model_config = {"populate_by_name": True}
 
@@ -295,7 +296,7 @@ class OrderPreviewResponse(BaseModel):
     preview: OrderPreview
 
     @classmethod
-    def from_api_response(cls, data: dict) -> OrderPreviewResponse:
+    def from_api_response(cls, data: dict[str, Any]) -> OrderPreviewResponse:
         """Parse from raw API response."""
         preview_data = data.get("PreviewOrderResponse", {})
         return cls(preview=OrderPreview.model_validate(preview_data))
@@ -307,7 +308,7 @@ class PlacedOrder(BaseModel):
     order_id: int = Field(alias="orderId")
     placed_time: datetime | None = Field(default=None, alias="placedTime")
     order_num: int = Field(alias="orderNum")
-    order: list[dict] = Field(default_factory=list, alias="Order")
+    order: list[dict[str, Any]] = Field(default_factory=list, alias="Order")
 
     model_config = {"populate_by_name": True}
 
@@ -318,7 +319,7 @@ class PlaceOrderResponse(BaseModel):
     order: PlacedOrder
 
     @classmethod
-    def from_api_response(cls, data: dict) -> PlaceOrderResponse:
+    def from_api_response(cls, data: dict[str, Any]) -> PlaceOrderResponse:
         """Parse from raw API response."""
         order_data = data.get("PlaceOrderResponse", {})
         return cls(order=PlacedOrder.model_validate(order_data))

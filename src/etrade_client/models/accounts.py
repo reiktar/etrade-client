@@ -3,6 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -58,7 +59,7 @@ class AccountListResponse(BaseModel):
     accounts: list[Account] = Field(default_factory=list)
 
     @classmethod
-    def from_api_response(cls, data: dict) -> AccountListResponse:
+    def from_api_response(cls, data: dict[str, Any]) -> AccountListResponse:
         """Parse from raw API response."""
         accounts_data = data.get("AccountListResponse", {}).get("Accounts", {})
         account_list = accounts_data.get("Account", [])
@@ -165,7 +166,7 @@ class BalanceResponse(BaseModel):
     balance: AccountBalance
 
     @classmethod
-    def from_api_response(cls, data: dict) -> BalanceResponse:
+    def from_api_response(cls, data: dict[str, Any]) -> BalanceResponse:
         """Parse from raw API response."""
         balance_data = data.get("BalanceResponse", {})
         return cls(balance=AccountBalance.model_validate(balance_data))
@@ -181,7 +182,7 @@ class Product(BaseModel):
     expiry_month: int = Field(alias="expiryMonth")
     expiry_year: int = Field(alias="expiryYear")
     strike_price: Decimal = Field(alias="strikePrice")
-    product_id: dict = Field(alias="productId")
+    product_id: dict[str, Any] = Field(alias="productId")
     # These may not always be present
     security_sub_type: str | None = Field(default=None, alias="securitySubType")
     exchange: str | None = Field(default=None)
@@ -245,7 +246,7 @@ class PortfolioResponse(BaseModel):
     total_value: Decimal = Field(default=Decimal("0"))
 
     @classmethod
-    def from_api_response(cls, data: dict, account_id: str) -> PortfolioResponse:
+    def from_api_response(cls, data: dict[str, Any], account_id: str) -> PortfolioResponse:
         """Parse from raw API response."""
         portfolio_data = data.get("PortfolioResponse", {})
         account_portfolios = portfolio_data.get("AccountPortfolio", [])

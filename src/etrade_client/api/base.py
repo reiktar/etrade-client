@@ -164,7 +164,8 @@ class BaseAPI:
         if response.status_code == 204:
             return {}
 
-        return response.json()
+        result: dict[str, Any] = response.json()
+        return result
 
     async def _get(
         self,
