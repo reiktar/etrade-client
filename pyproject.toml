@@ -60,6 +60,10 @@ skip-magic-trailing-comma = false
 [tool.ty.environment]
 python-version = "3.14"
 
+[tool.ty.rules]
+# Promote attribute access warnings to errors to catch typos and wrong field names
+possibly-missing-attribute = "error"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

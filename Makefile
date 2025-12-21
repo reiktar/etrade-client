@@ -1,4 +1,4 @@
-.PHONY: test integration integration-auth lint format check
+.PHONY: test integration integration-auth lint format type check
 
 # Run unit tests (default, excludes integration tests)
 test:
@@ -21,10 +21,14 @@ integration-only:
 lint:
 	uv run ruff check src/ tests/
 
+# Type check
+type:
+	uv run ty check src/
+
 # Format code
 format:
 	uv run ruff format src/ tests/
 	uv run ruff check --fix src/ tests/
 
-# Run all checks (lint + tests)
-check: lint test
+# Run all checks (type + lint + tests)
+check: type lint test
