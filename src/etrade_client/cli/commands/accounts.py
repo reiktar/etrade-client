@@ -31,6 +31,10 @@ async def list_accounts(
 
         response = await client.accounts.list_accounts()
 
+        if not response.accounts:
+            format_output([], output, title="Accounts")
+            return
+
         # Format account data for display
         accounts_data = [
             {
@@ -72,14 +76,27 @@ async def get_balance(
         response = await client.accounts.get_balance(account_id)
         bal = response.balance
 
-        # Format balance data
+        if not bal or not bal.computed:
+            print_error("Unable to retrieve balance data.")
+            raise typer.Exit(1)
+
+        computed = bal.computed
+        rtv = computed.real_time_values
+
+        # Format balance data with defensive null checks
         balance_data = {
             "account_type": bal.account_type or "",
-            "total_value": f"${bal.computed.real_time_values.total_account_value:,.2f}",
-            "cash_available": f"${bal.computed.cash_available_for_investment:,.2f}",
-            "net_cash": f"${bal.computed.net_cash:,.2f}",
-            "margin_buying_power": f"${bal.computed.margin_buying_power:,.2f}"
-            if bal.computed.margin_buying_power is not None
+            "total_value": f"${rtv.total_account_value:,.2f}"
+            if rtv and rtv.total_account_value is not None
+            else "N/A",
+            "cash_available": f"${computed.cash_available_for_investment:,.2f}"
+            if computed.cash_available_for_investment is not None
+            else "N/A",
+            "net_cash": f"${computed.net_cash:,.2f}"
+            if computed.net_cash is not None
+            else "N/A",
+            "margin_buying_power": f"${computed.margin_buying_power:,.2f}"
+            if computed.margin_buying_power is not None
             else "N/A",
         }
 

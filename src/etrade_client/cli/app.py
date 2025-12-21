@@ -1,11 +1,10 @@
 """Main Typer application."""
 
-import os
 from pathlib import Path
 
 import typer
 
-from etrade_client.cli.config import CLIConfig
+from etrade_client.cli.config import CLIConfig, _default_config_dir
 
 # Create main app
 app = typer.Typer(
@@ -13,14 +12,6 @@ app = typer.Typer(
     help="E*Trade API command-line interface.",
     no_args_is_help=True,
 )
-
-
-def _get_config_dir() -> Path:
-    """Get XDG-compliant config directory for CLI."""
-    xdg_config = os.environ.get("XDG_CONFIG_HOME")
-    if xdg_config:
-        return Path(xdg_config) / "etrade-cli"
-    return Path.home() / ".config" / "etrade-cli"
 
 
 @app.callback()
@@ -55,5 +46,5 @@ def main(
     ctx.obj = CLIConfig(
         sandbox=sandbox,
         verbose=verbose,
-        config_dir=config_dir or _get_config_dir(),
+        config_dir=config_dir or _default_config_dir(),
     )

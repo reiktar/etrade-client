@@ -36,7 +36,7 @@ def format_output(
     if isinstance(data, BaseModel):
         converted = [data.model_dump(by_alias=True, exclude_none=True)]
     elif isinstance(data, dict):
-        converted = [cast(dict[str, Any], data)]
+        converted = [cast(dict[str, Any], data)]  # type: ignore[redundant-cast]  # needed for ty
     elif isinstance(data, Sequence) and not isinstance(data, str):
         converted = [
             item.model_dump(by_alias=True, exclude_none=True)
