@@ -429,7 +429,7 @@ Options:
   --symbol TEXT        Filter by symbol
   --from TEXT          Start date (YYYY-MM-DD)
   --to TEXT            End date (YYYY-MM-DD)
-  -n, --limit INT      Maximum orders to return [default: 25]
+  -n, --limit INT      Maximum orders to return [default: all]
   -o, --output [table|json|csv]  Output format [default: table]
 ```
 
@@ -475,7 +475,7 @@ Options:
   -c, --category TEXT  Filter by category: STOCK, ACCOUNT
   -s, --status TEXT    Filter by status: READ, UNREAD, DELETED
   --search TEXT        Search in alert subject
-  -n, --limit INT      Maximum alerts to return (max 300) [default: 25]
+  -n, --limit INT      Maximum alerts to return (max 300) [default: all]
   -o, --output [table|json|csv]  Output format [default: table]
 ```
 

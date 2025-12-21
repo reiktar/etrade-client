@@ -31,11 +31,11 @@ async def list_alerts(
         "--search",
         help="Search in alert subject.",
     ),
-    limit: int = typer.Option(
-        25,
+    limit: int | None = typer.Option(
+        None,
         "--limit",
         "-n",
-        help="Maximum alerts to return (max 300).",
+        help="Maximum alerts to return (default: all, max 300).",
     ),
     output: OutputFormat = typer.Option(
         OutputFormat.TABLE,

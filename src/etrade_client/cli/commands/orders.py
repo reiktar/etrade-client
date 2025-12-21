@@ -41,11 +41,11 @@ async def list_orders(
         "--to",
         help="End date (YYYY-MM-DD).",
     ),
-    limit: int = typer.Option(
-        25,
+    limit: int | None = typer.Option(
+        None,
         "--limit",
         "-n",
-        help="Maximum orders to return.",
+        help="Maximum orders to return (default: all).",
     ),
     output: OutputFormat = typer.Option(
         OutputFormat.TABLE,
