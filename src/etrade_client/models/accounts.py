@@ -87,6 +87,29 @@ class CashBalance(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class OpenCalls(BaseModel):
+    """Open margin call details."""
+
+    min_equity_call: Decimal = Field(default=Decimal("0"), alias="minEquityCall")
+    fed_call: Decimal = Field(default=Decimal("0"), alias="fedCall")
+    cash_call: Decimal = Field(default=Decimal("0"), alias="cashCall")
+    house_call: Decimal = Field(default=Decimal("0"), alias="houseCall")
+
+    model_config = {"populate_by_name": True}
+
+
+class RealTimeValues(BaseModel):
+    """Real-time account values."""
+
+    total_account_value: Decimal = Field(default=Decimal("0"), alias="totalAccountValue")
+    net_mv: Decimal = Field(default=Decimal("0"), alias="netMv")
+    net_mv_long: Decimal = Field(default=Decimal("0"), alias="netMvLong")
+    net_mv_short: Decimal = Field(default=Decimal("0"), alias="netMvShort")
+    total_long_value: Decimal | None = Field(default=None, alias="totalLongValue")
+
+    model_config = {"populate_by_name": True}
+
+
 class ComputedBalance(BaseModel):
     """Computed account balance values."""
 
@@ -102,6 +125,24 @@ class ComputedBalance(BaseModel):
     margin_buying_power: Decimal = Field(default=Decimal("0"), alias="marginBuyingPower")
     real_time_account_value: Decimal = Field(default=Decimal("0"), alias="RealTimeAccountValue")
 
+    # Additional computed fields
+    settled_cash_for_investment: Decimal = Field(
+        default=Decimal("0"), alias="settledCashForInvestment"
+    )
+    un_settled_cash_for_investment: Decimal = Field(
+        default=Decimal("0"), alias="unSettledCashForInvestment"
+    )
+    funds_withheld_from_purchase_power: Decimal = Field(
+        default=Decimal("0"), alias="fundsWithheldFromPurchasePower"
+    )
+    funds_withheld_from_withdrawal: Decimal = Field(
+        default=Decimal("0"), alias="fundsWithheldFromWithdrawal"
+    )
+
+    # Nested objects
+    open_calls: OpenCalls | None = Field(default=None, alias="OpenCalls")
+    real_time_values: RealTimeValues | None = Field(default=None, alias="RealTimeValues")
+
     model_config = {"populate_by_name": True}
 
 
@@ -111,6 +152,7 @@ class AccountBalance(BaseModel):
     account_id: str = Field(alias="accountId")
     account_type: str = Field(alias="accountType")
     account_description: str | None = Field(default=None, alias="accountDescription")
+    option_level: str | None = Field(default=None, alias="optionLevel")
     cash: CashBalance | None = Field(default=None, alias="Cash")
     computed: ComputedBalance | None = Field(default=None, alias="Computed")
     net_account_value: Decimal = Field(default=Decimal("0"), alias="netAccountValue")

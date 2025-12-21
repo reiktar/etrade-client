@@ -41,8 +41,11 @@ class Transaction(BaseModel):
     post_date: datetime | None = Field(default=None, alias="postDate")
     amount: Decimal
     description: str | None = Field(default=None)
+    description2: str | None = Field(default=None)
     transaction_type: str | None = Field(default=None, alias="transactionType")
     memo: str | None = Field(default=None)
+    image_flag: bool | None = Field(default=None, alias="imageFlag")
+    store_id: int | None = Field(default=None, alias="storeId")
     category: dict | None = Field(default=None, alias="Category")
     brokerage: TransactionBrokerage | None = Field(default=None, alias="Brokerage")
 
