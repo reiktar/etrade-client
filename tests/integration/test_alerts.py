@@ -52,7 +52,6 @@ class TestAlertsAPI:
             for alert in alerts_response.alerts:
                 analyze_response(alert, f"alerts/list/{status}/Alert")
 
-    @pytest.mark.xfail(reason="Alert detail structure may differ - see P5 backlog")
     async def test_get_alert_details(self, async_integration_client, analyze_response) -> None:
         """Should get alert details if alerts exist."""
         client = async_integration_client
@@ -62,7 +61,7 @@ class TestAlertsAPI:
         if alerts_response.alerts:
             # Get details of first alert
             alert = alerts_response.alerts[0]
-            detail_response = await client.alerts.get_alert_details(alert.id)
+            detail_response = await client.alerts.get_alert_details(alert.alert_id)
 
             analyze_response(detail_response.alert, "alerts/details/Alert")
 

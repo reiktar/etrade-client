@@ -9,7 +9,6 @@ pytestmark = pytest.mark.integration
 class TestOrdersAPI:
     """Integration tests for OrdersAPI."""
 
-    @pytest.mark.xfail(reason="Sandbox OrderDetail structure differs from model - see P5 backlog")
     async def test_list_orders(self, async_integration_client, analyze_response) -> None:
         """Should list orders from the sandbox."""
         client = async_integration_client
@@ -31,7 +30,7 @@ class TestOrdersAPI:
         assert orders_response is not None
         assert hasattr(orders_response, "orders")
 
-    @pytest.mark.xfail(reason="Sandbox OrderDetail structure differs from model - see P5 backlog")
+    @pytest.mark.xfail(reason="Sandbox returns 500 error when filtering by status")
     async def test_list_orders_with_filters(self, async_integration_client, analyze_response) -> None:
         """Should filter orders by status."""
         client = async_integration_client
