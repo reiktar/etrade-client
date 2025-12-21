@@ -47,6 +47,10 @@ async def get_quote(
 
         response = await client.market.get_quotes(symbols, detail_flag=detail.upper())
 
+        if not response.quotes:
+            format_output([], output, title="Quotes")
+            return
+
         # Format quote data
         quotes_data = [
             {

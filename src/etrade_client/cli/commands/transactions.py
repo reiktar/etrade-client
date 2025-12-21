@@ -95,7 +95,7 @@ async def list_transactions(
                 "type": tx.transaction_type or "",
                 "description": (tx.description[:30] + "...") if tx.description and len(tx.description) > 30 else (tx.description or ""),
                 "symbol": (tx.brokerage.product.symbol or "") if tx.brokerage and tx.brokerage.product else "",
-                "quantity": tx.brokerage.quantity or 0 if tx.brokerage else "",
+                "quantity": (tx.brokerage.quantity or 0) if tx.brokerage else "",
                 "amount": f"${tx.amount:,.2f}" if tx.amount is not None else "",
             }
             for tx in transactions
