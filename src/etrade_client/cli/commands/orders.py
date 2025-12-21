@@ -7,7 +7,7 @@ import typer
 from etrade_client.cli.async_runner import async_command
 from etrade_client.cli.client_factory import get_client
 from etrade_client.cli.config import CLIConfig, OutputFormat
-from etrade_client.cli.formatters import format_output, print_error
+from etrade_client.cli.formatters import format_output, print_error, print_success
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -135,8 +135,6 @@ async def cancel_order(
         if not client.is_authenticated:
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
-
-        from etrade_client.cli.formatters import print_success
 
         result = await client.orders.cancel_order(account_id, order_id)
 
