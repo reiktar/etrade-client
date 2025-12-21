@@ -534,7 +534,7 @@ Arguments:
 Options:
   --from TEXT          Start date (YYYY-MM-DD)
   --to TEXT            End date (YYYY-MM-DD)
-  -n, --limit INT      Maximum transactions to return [default: 50]
+  -n, --limit INT      Maximum transactions to return [default: all]
   -s, --sort TEXT      Sort order: ASC or DESC [default: DESC]
   -o, --output [table|json|csv]  Output format [default: table]
 ```

@@ -30,11 +30,11 @@ async def list_transactions(
         "--to",
         help="End date (YYYY-MM-DD).",
     ),
-    limit: int = typer.Option(
-        50,
+    limit: int | None = typer.Option(
+        None,
         "--limit",
         "-n",
-        help="Maximum transactions to return.",
+        help="Maximum transactions to return (default: all).",
     ),
     sort: str = typer.Option(
         "DESC",
