@@ -34,12 +34,12 @@ async def list_orders(
     from_date: str | None = typer.Option(
         None,
         "--from",
-        help="Start date (YYYY-MM-DD).",
+        help="Start date (YYYY-MM-DD). Requires --to.",
     ),
     to_date: str | None = typer.Option(
         None,
         "--to",
-        help="End date (YYYY-MM-DD).",
+        help="End date (YYYY-MM-DD). Requires --from.",
     ),
     limit: int | None = typer.Option(
         None,
@@ -54,7 +54,11 @@ async def list_orders(
         help="Output format.",
     ),
 ) -> None:
-    """List orders for an account."""
+    """List orders for an account.
+
+    Without date filters, only recent orders are returned.
+    Use --from and --to together to get full order history.
+    """
     config: CLIConfig = ctx.obj
 
     # Parse dates
