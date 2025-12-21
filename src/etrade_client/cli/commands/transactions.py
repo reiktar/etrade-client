@@ -23,12 +23,22 @@ async def list_transactions(
     from_date: str | None = typer.Option(
         None,
         "--from",
-        help="Start date (YYYY-MM-DD).",
+        help="Start date (YYYY-MM-DD). Requires --to.",
     ),
     to_date: str | None = typer.Option(
         None,
         "--to",
-        help="End date (YYYY-MM-DD).",
+        help="End date (YYYY-MM-DD). Requires --from.",
+    ),
+    ytd: bool = typer.Option(
+        False,
+        "--ytd",
+        help="Year to date (Jan 1 to today).",
+    ),
+    alltime: bool = typer.Option(
+        False,
+        "--alltime",
+        help="All transactions (full history).",
     ),
     limit: int | None = typer.Option(
         None,
@@ -49,24 +59,39 @@ async def list_transactions(
         help="Output format.",
     ),
 ) -> None:
-    """List transactions for an account."""
+    """List transactions for an account.
+
+    Without date filters, only recent transactions are returned.
+    Use --ytd, --alltime, or --from/--to together for full history.
+    """
     config: CLIConfig = ctx.obj
 
     # Parse dates
     start_date = None
     end_date = None
-    if from_date:
-        try:
-            start_date = date.fromisoformat(from_date)
-        except ValueError:
-            print_error("Invalid from date format. Use YYYY-MM-DD.")
-            raise typer.Exit(1) from None
-    if to_date:
-        try:
-            end_date = date.fromisoformat(to_date)
-        except ValueError:
-            print_error("Invalid to date format. Use YYYY-MM-DD.")
-            raise typer.Exit(1) from None
+    today = date.today()
+
+    # Handle convenience date options
+    if ytd:
+        start_date = date(today.year, 1, 1)
+        end_date = today
+    elif alltime:
+        # E*Trade accounts typically don't go back further than 2010
+        start_date = date(2010, 1, 1)
+        end_date = today
+    elif from_date or to_date:
+        if from_date:
+            try:
+                start_date = date.fromisoformat(from_date)
+            except ValueError:
+                print_error("Invalid from date format. Use YYYY-MM-DD.")
+                raise typer.Exit(1) from None
+        if to_date:
+            try:
+                end_date = date.fromisoformat(to_date)
+            except ValueError:
+                print_error("Invalid to date format. Use YYYY-MM-DD.")
+                raise typer.Exit(1) from None
 
     async with get_client(config) as client:
         if not client.is_authenticated:

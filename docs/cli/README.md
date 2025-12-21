@@ -427,22 +427,32 @@ Arguments:
 Options:
   -s, --status TEXT    Filter by status: OPEN, EXECUTED, CANCELLED, EXPIRED, REJECTED
   --symbol TEXT        Filter by symbol
-  --from TEXT          Start date (YYYY-MM-DD)
-  --to TEXT            End date (YYYY-MM-DD)
+  --from TEXT          Start date (YYYY-MM-DD). Requires --to.
+  --to TEXT            End date (YYYY-MM-DD). Requires --from.
+  --ytd                Year to date (Jan 1 to today)
+  --alltime            All orders (full history)
   -n, --limit INT      Maximum orders to return [default: all]
   -o, --output [table|json|csv]  Output format [default: table]
 ```
 
+**Note:** Without date filters, only recent orders are returned. Use `--ytd`, `--alltime`, or `--from`/`--to` together for full history.
+
 **Example:**
 ```bash
-# All orders
+# Recent orders (default)
 etrade-cli orders list abc123
+
+# Year to date
+etrade-cli orders list abc123 --ytd
+
+# Full history
+etrade-cli orders list abc123 --alltime
 
 # Open orders only
 etrade-cli orders list abc123 --status OPEN
 
-# Orders for specific symbol
-etrade-cli orders list abc123 --symbol AAPL
+# Date range (both required)
+etrade-cli orders list abc123 --from 2024-01-01 --to 2024-12-31
 ```
 
 ### orders cancel
@@ -539,23 +549,33 @@ Arguments:
   ACCOUNT_ID  Account ID key
 
 Options:
-  --from TEXT          Start date (YYYY-MM-DD)
-  --to TEXT            End date (YYYY-MM-DD)
+  --from TEXT          Start date (YYYY-MM-DD). Requires --to.
+  --to TEXT            End date (YYYY-MM-DD). Requires --from.
+  --ytd                Year to date (Jan 1 to today)
+  --alltime            All transactions (full history)
   -n, --limit INT      Maximum transactions to return [default: all]
   -s, --sort TEXT      Sort order: ASC or DESC [default: DESC]
   -o, --output [table|json|csv]  Output format [default: table]
 ```
 
+**Note:** Without date filters, only recent transactions are returned. Use `--ytd`, `--alltime`, or `--from`/`--to` together for full history.
+
 **Example:**
 ```bash
-# Recent transactions
+# Recent transactions (default)
 etrade-cli transactions list abc123
 
-# Date range
+# Year to date
+etrade-cli transactions list abc123 --ytd
+
+# Full history
+etrade-cli transactions list abc123 --alltime
+
+# Date range (both required)
 etrade-cli transactions list abc123 --from 2024-01-01 --to 2024-12-31
 
 # Export to CSV
-etrade-cli transactions list abc123 -o csv > transactions.csv
+etrade-cli transactions list abc123 --alltime -o csv > transactions.csv
 ```
 
 ---
