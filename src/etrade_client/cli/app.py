@@ -18,10 +18,10 @@ app = typer.Typer(
 def main(
     ctx: typer.Context,
     sandbox: bool = typer.Option(
-        True,
+        False,
         "--sandbox/--production",
         "-s/-p",
-        help="Use sandbox (default) or production environment.",
+        help="Use sandbox or production (default) environment.",
         envvar="ETRADE_SANDBOX",
     ),
     verbose: bool = typer.Option(

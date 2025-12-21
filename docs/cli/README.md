@@ -100,7 +100,7 @@ etrade-cli [OPTIONS] COMMAND
 
 Options:
   -s, --sandbox / -p, --production
-                        Use sandbox (default) or production environment
+                        Use sandbox or production (default) environment
                         [env var: ETRADE_SANDBOX]
   -v, --verbose         Enable verbose output
   -c, --config-dir PATH Config directory for credentials
@@ -113,11 +113,11 @@ Options:
 ### Examples
 
 ```bash
-# Use sandbox (default)
+# Use production (default)
 etrade-cli accounts list
 
-# Use production
-etrade-cli --production accounts list
+# Use sandbox
+etrade-cli --sandbox accounts list
 
 # Custom directories
 etrade-cli --config-dir /path/to/config --data-dir /path/to/data accounts list

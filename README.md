@@ -228,7 +228,7 @@ Commands:
   transactions  Transaction history
 
 Options:
-  --sandbox / --production  Use sandbox or production environment
+  --sandbox / --production  Use sandbox or production (default) environment
   --verbose                 Enable verbose output
   --config-dir PATH         Config directory
 ```
