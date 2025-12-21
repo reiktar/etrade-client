@@ -127,14 +127,28 @@ async def list_orders(
             instrument = detail.instruments[0] if detail and detail.instruments else None
             product = instrument.product if instrument else None
 
+            # Determine limit/stop price to display
+            order_price = ""
+            if detail:
+                if detail.order_type in ("LIMIT", "STOP_LIMIT") and detail.limit_price:
+                    order_price = f"${detail.limit_price:,.2f}"
+                elif detail.order_type in ("STOP", "STOP_LIMIT") and detail.stop_price:
+                    order_price = f"${detail.stop_price:,.2f}"
+
+            # Execution price (for filled orders)
+            exec_price = ""
+            if instrument and instrument.average_execution_price:
+                exec_price = f"${instrument.average_execution_price:,.2f}"
+
             orders_data.append({
                 "order_id": order.order_id or "",
                 "symbol": product.symbol if product else "",
                 "action": instrument.order_action if instrument else "",
-                "quantity": instrument.quantity if instrument else "",
+                "qty": instrument.quantity if instrument else "",
                 "type": detail.order_type if detail else "",
                 "status": detail.status if detail else "",
-                "price": f"${detail.limit_price:,.2f}" if detail and detail.limit_price else "MKT",
+                "limit/stop": order_price,
+                "exec_price": exec_price,
             })
 
         format_output(orders_data, output, title="Orders")
