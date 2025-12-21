@@ -11,13 +11,11 @@ dependencies = [
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
     "tenacity>=9.0.0",
-]
-
-[project.optional-dependencies]
-cli = [
     "typer>=0.15.0",
     "rich>=13.0",
 ]
+
+[project.optional-dependencies]
 dev = [
     "ruff>=0.8.0",
     "ty>=0.0.1a7",
@@ -25,9 +23,6 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "python-dotenv>=1.0.0",  # Optional: for loading .env.integration
-    # CLI dependencies (included in dev for convenience)
-    "typer>=0.15.0",
-    "rich>=13.0",
 ]
 
 [project.scripts]

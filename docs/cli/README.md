@@ -18,7 +18,7 @@ Command-line interface for E\*Trade API.
 ## Installation
 
 ```bash
-uv add etrade-client[cli]
+uv add etrade-client
 ```
 
 ## Configuration

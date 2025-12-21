@@ -19,13 +19,9 @@ A fully typed, async Python client library for E\*Trade's APIs.
 ## Installation
 
 ```bash
-# Library only
 uv add etrade-client
 
-# With CLI
-uv add etrade-client[cli]
-
-# Development
+# Development (includes testing tools)
 uv add etrade-client[dev]
 ```
 
