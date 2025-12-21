@@ -240,6 +240,21 @@ class ETradeResponseNormalizer:
         "Order": "orderId",
     }
 
+    # Maps intermediate wrapper keys to the array container they hold
+    # E.g., "Accounts" contains the "Account" array
+    WRAPPER_TO_CONTAINER: dict[str, str] = {
+        "Accounts": "Account",
+        "AccountPortfolio": "Position",
+    }
+
+    # Keys that are siblings to the model array but not part of the model
+    # These are metadata/summary fields at the wrapper level
+    STRUCTURAL_KEYS: set[str] = {
+        "Accounts",
+        "AccountPortfolio",
+        "Totals",
+    }
+
     def unwrap_response(self, raw_json: dict[str, Any]) -> dict[str, Any]:
         """Remove the outer *Response wrapper if present."""
         for key in list(raw_json.keys()):
@@ -265,33 +280,69 @@ class ETradeResponseNormalizer:
         if json_keys & model_keys:
             return raw_json
 
-        # Look for array containers
+        # Check for intermediate wrappers (e.g., "Accounts" containing "Account")
+        for wrapper_key, container_key in self.WRAPPER_TO_CONTAINER.items():
+            if wrapper_key not in raw_json:
+                continue
+
+            wrapper_data = raw_json[wrapper_key]
+
+            # Handle wrapper as dict containing the array container
+            if isinstance(wrapper_data, dict) and container_key in wrapper_data:
+                return self._find_in_array(
+                    wrapper_data[container_key],
+                    model_instance,
+                    self.ARRAY_CONTAINERS.get(container_key),
+                )
+
+            # Handle wrapper as list (e.g., AccountPortfolio is a list)
+            if isinstance(wrapper_data, list):
+                for item in wrapper_data:
+                    if isinstance(item, dict) and container_key in item:
+                        return self._find_in_array(
+                            item[container_key],
+                            model_instance,
+                            self.ARRAY_CONTAINERS.get(container_key),
+                        )
+
+        # Look for direct array containers
         for container_key, match_field in self.ARRAY_CONTAINERS.items():
             if container_key not in raw_json:
                 continue
 
-            array_data = raw_json[container_key]
-            if isinstance(array_data, dict):
-                array_data = [array_data]
-
-            if not isinstance(array_data, list) or not array_data:
-                continue
-
-            # Try to match by identifier field
-            if match_field:
-                # Convert camelCase to snake_case for model attribute
-                model_attr = self._to_snake_case(match_field)
-                model_value = getattr(model_instance, model_attr, None)
-
-                if model_value is not None:
-                    for item in array_data:
-                        if item.get(match_field) == model_value:
-                            return item
-
-            # Fall back to first item
-            return array_data[0]
+            return self._find_in_array(
+                raw_json[container_key],
+                model_instance,
+                match_field,
+            )
 
         return raw_json
+
+    def _find_in_array(
+        self,
+        array_data: Any,
+        model_instance: BaseModel,
+        match_field: str | None,
+    ) -> dict[str, Any]:
+        """Find a matching item in an array by identifier field."""
+        if isinstance(array_data, dict):
+            array_data = [array_data]
+
+        if not isinstance(array_data, list) or not array_data:
+            return {}
+
+        # Try to match by identifier field
+        if match_field:
+            model_attr = self._to_snake_case(match_field)
+            model_value = getattr(model_instance, model_attr, None)
+
+            if model_value is not None:
+                for item in array_data:
+                    if isinstance(item, dict) and item.get(match_field) == model_value:
+                        return item
+
+        # Fall back to first item
+        return array_data[0] if array_data else {}
 
     def _get_model_keys(self, model_class: type[BaseModel]) -> set[str]:
         """Get all valid keys (field names + aliases) for a model."""
