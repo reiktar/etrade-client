@@ -78,22 +78,25 @@ async def list_orders(
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
-        response = await client.orders.list_orders(
+        # Collect orders using pagination iterator
+        orders = []
+        async for order in client.orders.iter_orders(
             account_id,
             status=status.upper() if status else None,
             symbol=symbol.upper() if symbol else None,
             from_date=start_date,
             to_date=end_date,
-            count=limit,
-        )
+            limit=limit,
+        ):
+            orders.append(order)
 
-        if not response.orders:
+        if not orders:
             format_output([], output, title="Orders")
             return
 
         # Format order data
         orders_data = []
-        for order in response.orders:
+        for order in orders:
             # Get first order detail for basic info
             detail = order.order_details[0] if order.order_details else None
             instrument = detail.instruments[0] if detail and detail.instruments else None
