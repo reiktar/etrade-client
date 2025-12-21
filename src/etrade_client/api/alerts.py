@@ -1,6 +1,7 @@
 """Alerts API endpoints."""
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.alerts import (
@@ -38,7 +39,7 @@ class AlertsAPI(BaseAPI):
         Returns:
             AlertListResponse with list of alerts
         """
-        params: dict = {"count": min(count, 300)}
+        params: dict[str, Any] = {"count": min(count, 300)}
 
         if category:
             params["category"] = category

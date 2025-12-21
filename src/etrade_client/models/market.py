@@ -158,7 +158,7 @@ class QuoteResponse(BaseModel):
     quotes: list[Quote] = Field(default_factory=list)
 
     @classmethod
-    def from_api_response(cls, data: dict) -> QuoteResponse:
+    def from_api_response(cls, data: dict[str, Any]) -> QuoteResponse:
         """Parse from raw API response."""
         quote_response = data.get("QuoteResponse", {})
         quote_data = quote_response.get("QuoteData", [])
@@ -272,7 +272,7 @@ class OptionChain(BaseModel):
     option_pairs: list[OptionPair] = Field(default_factory=list)
 
     @classmethod
-    def from_api_response(cls, data: dict, symbol: str, expiry: date) -> OptionChain:
+    def from_api_response(cls, data: dict[str, Any], symbol: str, expiry: date) -> OptionChain:
         """Parse from raw API response."""
         chain_response = data.get("OptionChainResponse", {})
         option_pairs_data = chain_response.get("OptionPair", [])
@@ -296,7 +296,7 @@ class OptionExpireDate(BaseModel):
     model_config = {"populate_by_name": True}
 
     @classmethod
-    def from_api_response(cls, data: dict) -> list[OptionExpireDate]:
+    def from_api_response(cls, data: dict[str, Any]) -> list[OptionExpireDate]:
         """Parse from raw API response."""
         expire_response = data.get("OptionExpireDateResponse", {})
         expire_dates = expire_response.get("ExpirationDate", [])

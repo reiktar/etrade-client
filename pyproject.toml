@@ -21,6 +21,7 @@ cli = [
 dev = [
     "ruff>=0.8.0",
     "ty>=0.0.1a7",
+    "mypy>=1.18.0,<1.19.0",  # Pin to 1.18.x for pydantic.mypy plugin compatibility
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "python-dotenv>=1.0.0",  # Optional: for loading .env.integration
@@ -76,8 +77,22 @@ skip-magic-trailing-comma = false
 python-version = "3.14"
 
 [tool.ty.rules]
-# Promote attribute access warnings to errors so they fail CI
+# Promote attribute access warnings to errors to catch typos and wrong field names
 possibly-missing-attribute = "error"
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

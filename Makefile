@@ -1,4 +1,4 @@
-.PHONY: test integration integration-auth lint format check
+.PHONY: test integration integration-auth lint format type mypy check
 
 # Run unit tests (default, excludes integration tests)
 test:
@@ -21,10 +21,18 @@ integration-only:
 lint:
 	uv run ruff check src/ tests/
 
+# Type check (ty - fast, experimental)
+type:
+	uv run ty check src/
+
+# Type check (mypy - stable, production-ready)
+mypy:
+	uv run mypy src/
+
 # Format code
 format:
 	uv run ruff format src/ tests/
 	uv run ruff check --fix src/ tests/
 
-# Run all checks (lint + tests)
-check: lint test
+# Run all checks (type + mypy + lint + tests)
+check: type mypy lint test

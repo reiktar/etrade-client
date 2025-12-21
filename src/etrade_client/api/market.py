@@ -1,6 +1,6 @@
 """Market Data API endpoints."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.market import OptionChain, OptionExpireDate, QuoteResponse
@@ -122,7 +122,7 @@ class MarketAPI(BaseAPI):
     async def lookup(
         self,
         search: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Look up securities by name or partial symbol.
 
         Args:
@@ -134,7 +134,7 @@ class MarketAPI(BaseAPI):
         data = await self._get(f"/market/lookup/{search}")
 
         lookup_response = data.get("LookupResponse", {})
-        results = lookup_response.get("Data", [])
+        results: list[dict[str, Any]] = lookup_response.get("Data", [])
 
         if isinstance(results, dict):
             results = [results]
