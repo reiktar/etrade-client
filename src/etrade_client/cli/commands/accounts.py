@@ -246,10 +246,12 @@ async def list_dividends(
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
-        # Collect dividend transactions
-        dividends = []
-        total_cash = Decimal("0")
-        total_reinvested = Decimal("0")
+        # Collect dividend transactions, grouping by date/symbol/amount
+        # to combine dividend + reinvestment pairs into single rows
+        from collections import defaultdict
+
+        # Key: (date_str, symbol, abs_amount) -> list of transactions
+        dividend_groups: dict[tuple[str, str, Decimal], list] = defaultdict(list)
 
         async for tx in client.accounts.iter_transactions(
             account_id,
@@ -266,62 +268,71 @@ async def list_dividends(
             if symbol and (not tx_symbol or tx_symbol.upper() != symbol.upper()):
                 continue
 
-            # Determine if this is a DRIP (reinvestment)
-            is_drip = (
-                tx.amount < 0
-                or "REINVESTMENT" in (tx.description or "").upper()
-            )
+            # Group by date, symbol, and absolute amount
+            date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else ""
+            key = (date_str, tx_symbol or "", abs(tx.amount))
+            dividend_groups[key].append(tx)
 
-            # Track totals
-            if is_drip:
-                total_reinvested += abs(tx.amount)
-            else:
-                total_cash += tx.amount
-
-            dividends.append({
-                "tx": tx,
-                "is_drip": is_drip,
-            })
-
-            # Check limit
-            if limit is not None and len(dividends) >= limit:
-                break
-
-        if not dividends:
+        if not dividend_groups:
             format_output([], output, title="Dividends")
             return
 
-        # Format dividend data
+        # Process groups into consolidated rows
         dividend_data = []
-        for item in dividends:
-            tx = item["tx"]
-            is_drip = item["is_drip"]
+        total_dividends = Decimal("0")
+        total_reinvested = Decimal("0")
+
+        # Sort by date descending
+        sorted_keys = sorted(dividend_groups.keys(), key=lambda k: k[0], reverse=True)
+
+        for key in sorted_keys:
+            txs = dividend_groups[key]
+            date_str, tx_symbol, amount = key
+
+            # Find the cash dividend (positive) and reinvestment (negative)
+            cash_tx = None
+            reinvest_tx = None
+            for tx in txs:
+                if tx.amount > 0:
+                    cash_tx = tx
+                elif tx.amount < 0 or "REINVESTMENT" in (tx.description or "").upper():
+                    reinvest_tx = tx
+
+            # Build the row
+            is_drip = reinvest_tx is not None
+            total_dividends += amount
+
+            if is_drip:
+                total_reinvested += amount
 
             row = {
-                "date": tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else "",
-                "symbol": tx.symbol or "",
-                "amount": f"${abs(tx.amount):,.2f}" if tx.amount is not None else "",
+                "date": date_str,
+                "symbol": tx_symbol,
+                "amount": f"${amount:,.2f}",
                 "drip": "Yes" if is_drip else "",
+                "shares": "",
+                "price": "",
             }
 
-            # Add DRIP details if applicable
-            if is_drip and tx.brokerage:
-                if tx.brokerage.quantity:
-                    row["shares"] = f"{tx.brokerage.quantity:.3f}"
-                if tx.brokerage.price:
-                    row["price"] = f"${tx.brokerage.price:,.2f}"
-            else:
-                row["shares"] = ""
-                row["price"] = ""
+            # Add DRIP details from reinvestment transaction
+            if reinvest_tx and reinvest_tx.brokerage:
+                if reinvest_tx.brokerage.quantity:
+                    row["shares"] = f"{reinvest_tx.brokerage.quantity:.3f}"
+                if reinvest_tx.brokerage.price:
+                    row["price"] = f"${reinvest_tx.brokerage.price:,.2f}"
 
             dividend_data.append(row)
 
+            # Check limit
+            if limit is not None and len(dividend_data) >= limit:
+                break
+
         # Add summary row for table output
-        if output == OutputFormat.TABLE and len(dividends) > 1:
+        if output == OutputFormat.TABLE and len(dividend_data) > 1:
             dividend_data.append({
                 "date": "---",
                 "symbol": "TOTAL",
-                "amount": f"${total_cash + total_reinvested:,.2f}",
+                "amount": f"${total_dividends:,.2f}",
                 "drip": f"(${total_reinvested:,.2f} reinvested)",
                 "shares": "",
                 "price": "",
