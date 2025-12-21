@@ -11,6 +11,106 @@ from etrade_client.models.accounts import (
 )
 
 
+def _complete_account_data(**overrides) -> dict:
+    """Helper to create complete account test data with all required fields."""
+    base = {
+        "accountId": "12345678",
+        "accountIdKey": "abc123",
+        "accountType": "INDIVIDUAL",
+        "accountDesc": "My Brokerage",
+        "accountName": "John Doe",
+        "accountMode": "CASH",
+        "accountStatus": "ACTIVE",
+        "institutionType": "BROKERAGE",
+        "closedDate": 0,
+        "shareWorksAccount": False,
+        "fcManagedMssbClosedAccount": False,
+    }
+    base.update(overrides)
+    return base
+
+
+def _complete_balance_data(**overrides) -> dict:
+    """Helper to create complete account balance test data with all required fields."""
+    base = {
+        "accountId": "12345678",
+        "accountType": "INDIVIDUAL",
+        "accountDescription": "My Account",
+        "optionLevel": "LEVEL_2",
+        "Cash": {
+            "cashBalance": "5000.00",
+            "cashAvailableForWithdrawal": "4500.00",
+            "cashAvailableForInvestment": "4800.00",
+        },
+        "Computed": {
+            "accountBalance": "150000.00",
+            "marginBuyingPower": "50000.00",
+            "RealTimeAccountValue": "150500.00",
+            "OpenCalls": {
+                "minEquityCall": "0.00",
+                "fedCall": "0.00",
+                "cashCall": "0.00",
+                "houseCall": "0.00",
+            },
+            "RealTimeValues": {
+                "totalAccountValue": "150500.00",
+                "netMv": "145000.00",
+                "netMvLong": "145000.00",
+                "netMvShort": "0.00",
+            },
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def _complete_position_data(**overrides) -> dict:
+    """Helper to create complete portfolio position test data with all required fields."""
+    base = {
+        "positionId": 1,
+        "Product": {
+            "symbol": "AAPL",
+            "securityType": "EQ",
+            "expiryDay": 0,
+            "expiryMonth": 0,
+            "expiryYear": 0,
+            "strikePrice": "0.00",
+            "productId": {},
+        },
+        "quantity": 100,
+        "costPerShare": 150.00,
+        "totalCost": 15000.00,
+        "marketValue": 17500.00,
+        "totalGain": 2500.00,
+        "totalGainPct": 16.67,
+        "daysGain": 250.00,
+        "daysGainPct": 1.45,
+        "positionType": "LONG",
+        "Quick": {
+            "lastTrade": "175.00",
+            "change": "2.50",
+            "changePct": "1.45",
+            "volume": 50000000,
+            "lastTradeTime": 1705318200,
+        },
+        "dateAcquired": "2024-01-15T10:30:00",
+        "symbolDescription": "Apple Inc.",
+        "positionIndicator": "EQUITY",
+        "pctOfPortfolio": 17.50,
+        "pricePaid": 150.00,
+        "commissions": 0.00,
+        "otherFees": 0.00,
+        "lotsDetails": "Lot 1",
+        "quoteDetails": "NASDAQ",
+        "todayQuantity": 0,
+        "todayPricePaid": 0.00,
+        "todayCommissions": 0.00,
+        "todayFees": 0.00,
+    }
+    base.update(overrides)
+    return base
+
+
 class TestAccountListResponse:
     """Tests for AccountListResponse.from_api_response."""
 
@@ -20,20 +120,18 @@ class TestAccountListResponse:
             "AccountListResponse": {
                 "Accounts": {
                     "Account": [
-                        {
-                            "accountId": "12345678",
-                            "accountIdKey": "abc123",
-                            "accountType": "INDIVIDUAL",
-                            "accountDesc": "My Brokerage",
-                            "accountStatus": "ACTIVE",
-                        },
-                        {
-                            "accountId": "87654321",
-                            "accountIdKey": "xyz789",
-                            "accountType": "IRA",
-                            "accountDesc": "Retirement",
-                            "accountStatus": "ACTIVE",
-                        },
+                        _complete_account_data(
+                            accountId="12345678",
+                            accountIdKey="abc123",
+                            accountType="INDIVIDUAL",
+                            accountDesc="My Brokerage",
+                        ),
+                        _complete_account_data(
+                            accountId="87654321",
+                            accountIdKey="xyz789",
+                            accountType="IRA",
+                            accountDesc="Retirement",
+                        ),
                     ]
                 }
             }
@@ -53,11 +151,11 @@ class TestAccountListResponse:
         data = {
             "AccountListResponse": {
                 "Accounts": {
-                    "Account": {
-                        "accountId": "12345678",
-                        "accountIdKey": "abc123",
-                        "accountType": "INDIVIDUAL",
-                    }
+                    "Account": _complete_account_data(
+                        accountId="12345678",
+                        accountIdKey="abc123",
+                        accountType="INDIVIDUAL",
+                    )
                 }
             }
         }
@@ -83,16 +181,17 @@ class TestAccountListResponse:
 
         assert len(result.accounts) == 0
 
-    def test_parses_minimal_account_fields(self) -> None:
-        """Should parse account with only required fields."""
+    def test_parses_all_account_fields(self) -> None:
+        """Should parse account with all fields."""
         data = {
             "AccountListResponse": {
                 "Accounts": {
-                    "Account": {
-                        "accountId": "12345678",
-                        "accountIdKey": "abc123",
-                        "accountType": "INDIVIDUAL",
-                    }
+                    "Account": _complete_account_data(
+                        accountId="12345678",
+                        accountDesc="Test Account",
+                        accountName="John Doe",
+                        accountStatus="ACTIVE",
+                    )
                 }
             }
         }
@@ -100,9 +199,9 @@ class TestAccountListResponse:
         result = AccountListResponse.from_api_response(data)
 
         assert result.accounts[0].account_id == "12345678"
-        assert result.accounts[0].account_desc is None
-        assert result.accounts[0].account_name is None
-        assert result.accounts[0].account_status is None
+        assert result.accounts[0].account_desc == "Test Account"
+        assert result.accounts[0].account_name == "John Doe"
+        assert result.accounts[0].account_status == "ACTIVE"
 
 
 class TestBalanceResponse:
@@ -111,23 +210,10 @@ class TestBalanceResponse:
     def test_parses_complete_balance(self) -> None:
         """Should parse complete balance response."""
         data = {
-            "BalanceResponse": {
-                "accountId": "12345678",
-                "accountType": "INDIVIDUAL",
-                "accountDescription": "My Account",
-                "netAccountValue": "150000.00",
-                "totalAccountValue": "175000.00",
-                "Cash": {
-                    "cashBalance": "5000.00",
-                    "cashAvailableForWithdrawal": "4500.00",
-                    "cashAvailableForInvestment": "4800.00",
-                },
-                "Computed": {
-                    "accountBalance": "150000.00",
-                    "marginBuyingPower": "50000.00",
-                    "RealTimeAccountValue": "150500.00",
-                },
-            }
+            "BalanceResponse": _complete_balance_data(
+                netAccountValue="150000.00",
+                totalAccountValue="175000.00",
+            )
         }
 
         result = BalanceResponse.from_api_response(data)
@@ -140,20 +226,20 @@ class TestBalanceResponse:
         assert result.balance.computed is not None
         assert result.balance.computed.margin_buying_power == Decimal("50000.00")
 
-    def test_parses_balance_without_cash_section(self) -> None:
-        """Should handle missing Cash section."""
+    def test_parses_balance_with_all_fields(self) -> None:
+        """Should handle balance with all required fields."""
         data = {
-            "BalanceResponse": {
-                "accountId": "12345678",
-                "accountType": "INDIVIDUAL",
-            }
+            "BalanceResponse": _complete_balance_data(
+                accountId="12345678",
+                accountType="INDIVIDUAL",
+            )
         }
 
         result = BalanceResponse.from_api_response(data)
 
         assert result.balance.account_id == "12345678"
-        assert result.balance.cash is None
-        assert result.balance.computed is None
+        assert result.balance.cash is not None
+        assert result.balance.computed is not None
 
 
 class TestPortfolioResponse:
@@ -166,34 +252,42 @@ class TestPortfolioResponse:
                 "AccountPortfolio": {
                     "totalValue": "100000.00",
                     "Position": [
-                        {
-                            "positionId": 1,
-                            "Product": {
+                        _complete_position_data(
+                            positionId=1,
+                            Product={
                                 "symbol": "AAPL",
                                 "securityType": "EQ",
+                                "expiryDay": 0,
+                                "expiryMonth": 0,
+                                "expiryYear": 0,
+                                "strikePrice": "0.00",
+                                "productId": {},
                             },
-                            "quantity": 100,
-                            "costPerShare": 150.00,
-                            "totalCost": 15000.00,
-                            "marketValue": 17500.00,
-                            "totalGain": 2500.00,
-                            "totalGainPct": 16.67,
-                            "positionType": "LONG",
-                        },
-                        {
-                            "positionId": 2,
-                            "Product": {
+                            quantity=100,
+                            costPerShare=150.00,
+                            totalCost=15000.00,
+                            marketValue=17500.00,
+                            totalGain=2500.00,
+                            totalGainPct=16.67,
+                        ),
+                        _complete_position_data(
+                            positionId=2,
+                            Product={
                                 "symbol": "MSFT",
                                 "securityType": "EQ",
+                                "expiryDay": 0,
+                                "expiryMonth": 0,
+                                "expiryYear": 0,
+                                "strikePrice": "0.00",
+                                "productId": {},
                             },
-                            "quantity": 50,
-                            "costPerShare": 300.00,
-                            "totalCost": 15000.00,
-                            "marketValue": 18000.00,
-                            "totalGain": 3000.00,
-                            "totalGainPct": 20.00,
-                            "positionType": "LONG",
-                        },
+                            quantity=50,
+                            costPerShare=300.00,
+                            totalCost=15000.00,
+                            marketValue=18000.00,
+                            totalGain=3000.00,
+                            totalGainPct=20.00,
+                        ),
                     ],
                 }
             }
@@ -214,20 +308,24 @@ class TestPortfolioResponse:
             "PortfolioResponse": {
                 "AccountPortfolio": {
                     "totalValue": "50000.00",
-                    "Position": {
-                        "positionId": 1,
-                        "Product": {
+                    "Position": _complete_position_data(
+                        positionId=1,
+                        Product={
                             "symbol": "GOOG",
                             "securityType": "EQ",
+                            "expiryDay": 0,
+                            "expiryMonth": 0,
+                            "expiryYear": 0,
+                            "strikePrice": "0.00",
+                            "productId": {},
                         },
-                        "quantity": 25,
-                        "costPerShare": 140.00,
-                        "totalCost": 3500.00,
-                        "marketValue": 4000.00,
-                        "totalGain": 500.00,
-                        "totalGainPct": 14.29,
-                        "positionType": "LONG",
-                    },
+                        quantity=25,
+                        costPerShare=140.00,
+                        totalCost=3500.00,
+                        marketValue=4000.00,
+                        totalGain=500.00,
+                        totalGainPct=14.29,
+                    ),
                 }
             }
         }
@@ -260,31 +358,45 @@ class TestPortfolioResponse:
                 "AccountPortfolio": [
                     {
                         "totalValue": "50000.00",
-                        "Position": {
-                            "positionId": 1,
-                            "Product": {"symbol": "AAPL", "securityType": "EQ"},
-                            "quantity": 100,
-                            "costPerShare": 150.00,
-                            "totalCost": 15000.00,
-                            "marketValue": 17500.00,
-                            "totalGain": 2500.00,
-                            "totalGainPct": 16.67,
-                            "positionType": "LONG",
-                        },
+                        "Position": _complete_position_data(
+                            positionId=1,
+                            Product={
+                                "symbol": "AAPL",
+                                "securityType": "EQ",
+                                "expiryDay": 0,
+                                "expiryMonth": 0,
+                                "expiryYear": 0,
+                                "strikePrice": "0.00",
+                                "productId": {},
+                            },
+                            quantity=100,
+                            costPerShare=150.00,
+                            totalCost=15000.00,
+                            marketValue=17500.00,
+                            totalGain=2500.00,
+                            totalGainPct=16.67,
+                        ),
                     },
                     {
                         "totalValue": "30000.00",
-                        "Position": {
-                            "positionId": 2,
-                            "Product": {"symbol": "MSFT", "securityType": "EQ"},
-                            "quantity": 50,
-                            "costPerShare": 300.00,
-                            "totalCost": 15000.00,
-                            "marketValue": 16000.00,
-                            "totalGain": 1000.00,
-                            "totalGainPct": 6.67,
-                            "positionType": "LONG",
-                        },
+                        "Position": _complete_position_data(
+                            positionId=2,
+                            Product={
+                                "symbol": "MSFT",
+                                "securityType": "EQ",
+                                "expiryDay": 0,
+                                "expiryMonth": 0,
+                                "expiryYear": 0,
+                                "strikePrice": "0.00",
+                                "productId": {},
+                            },
+                            quantity=50,
+                            costPerShare=300.00,
+                            totalCost=15000.00,
+                            marketValue=16000.00,
+                            totalGain=1000.00,
+                            totalGainPct=6.67,
+                        ),
                     },
                 ]
             }

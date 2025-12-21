@@ -40,16 +40,14 @@ class Account(BaseModel):
     account_id: str = Field(alias="accountId")
     account_id_key: str = Field(alias="accountIdKey")
     account_type: str = Field(alias="accountType")
-    account_desc: str | None = Field(default=None, alias="accountDesc")
-    account_name: str | None = Field(default=None, alias="accountName")
-    account_mode: str | None = Field(default=None, alias="accountMode")
-    account_status: str | None = Field(default=None, alias="accountStatus")
-    institution_type: str | None = Field(default=None, alias="institutionType")
-    closed_date: int | None = Field(default=None, alias="closedDate")
-    share_works_account: bool | None = Field(default=None, alias="shareWorksAccount")
-    fc_managed_mssb_closed_account: bool | None = Field(
-        default=None, alias="fcManagedMssbClosedAccount"
-    )
+    account_desc: str = Field(alias="accountDesc")
+    account_name: str = Field(alias="accountName")
+    account_mode: str = Field(alias="accountMode")
+    account_status: str = Field(alias="accountStatus")
+    institution_type: str = Field(alias="institutionType")
+    closed_date: int = Field(alias="closedDate")
+    share_works_account: bool = Field(alias="shareWorksAccount")
+    fc_managed_mssb_closed_account: bool = Field(alias="fcManagedMssbClosedAccount")
 
     model_config = {"populate_by_name": True}
 
@@ -144,9 +142,9 @@ class ComputedBalance(BaseModel):
         default=Decimal("0"), alias="fundsWithheldFromWithdrawal"
     )
 
-    # Nested objects
-    open_calls: OpenCalls | None = Field(default=None, alias="OpenCalls")
-    real_time_values: RealTimeValues | None = Field(default=None, alias="RealTimeValues")
+    # Nested objects - always present in API responses
+    open_calls: OpenCalls = Field(alias="OpenCalls")
+    real_time_values: RealTimeValues = Field(alias="RealTimeValues")
 
     model_config = {"populate_by_name": True}
 
@@ -156,12 +154,13 @@ class AccountBalance(BaseModel):
 
     account_id: str = Field(alias="accountId")
     account_type: str = Field(alias="accountType")
-    account_description: str | None = Field(default=None, alias="accountDescription")
-    option_level: str | None = Field(default=None, alias="optionLevel")
-    cash: CashBalance | None = Field(default=None, alias="Cash")
-    computed: ComputedBalance | None = Field(default=None, alias="Computed")
-    net_account_value: Decimal = Field(default=Decimal("0"), alias="netAccountValue")
-    total_account_value: Decimal = Field(default=Decimal("0"), alias="totalAccountValue")
+    account_description: str = Field(alias="accountDescription")
+    option_level: str = Field(alias="optionLevel")
+    cash: CashBalance = Field(alias="Cash")
+    computed: ComputedBalance = Field(alias="Computed")
+    # These fields are context-specific - may not always be present
+    net_account_value: Decimal | None = Field(default=None, alias="netAccountValue")
+    total_account_value: Decimal | None = Field(default=None, alias="totalAccountValue")
 
     model_config = {"populate_by_name": True}
 
@@ -183,14 +182,15 @@ class Product(BaseModel):
 
     symbol: str
     security_type: str = Field(alias="securityType")
+    # Option-specific fields - always present (0 for non-options)
+    expiry_day: int = Field(alias="expiryDay")
+    expiry_month: int = Field(alias="expiryMonth")
+    expiry_year: int = Field(alias="expiryYear")
+    strike_price: Decimal = Field(alias="strikePrice")
+    product_id: dict = Field(alias="productId")
+    # These may not always be present
     security_sub_type: str | None = Field(default=None, alias="securitySubType")
     exchange: str | None = Field(default=None)
-    # Option-specific fields
-    expiry_day: int | None = Field(default=None, alias="expiryDay")
-    expiry_month: int | None = Field(default=None, alias="expiryMonth")
-    expiry_year: int | None = Field(default=None, alias="expiryYear")
-    strike_price: Decimal | None = Field(default=None, alias="strikePrice")
-    product_id: dict | None = Field(default=None, alias="productId")
 
     model_config = {"populate_by_name": True}
 
@@ -199,10 +199,10 @@ class PositionQuick(BaseModel):
     """Quick quote for a position."""
 
     last_trade: Decimal = Field(alias="lastTrade")
-    change: Decimal | None = Field(default=None)
-    change_pct: Decimal | None = Field(default=None, alias="changePct")
-    volume: int | None = Field(default=None)
-    last_trade_time: int | None = Field(default=None, alias="lastTradeTime")
+    change: Decimal = Field()
+    change_pct: Decimal = Field(alias="changePct")
+    volume: int = Field()
+    last_trade_time: int = Field(alias="lastTradeTime")
 
     model_config = {"populate_by_name": True}
 
@@ -218,27 +218,27 @@ class PortfolioPosition(BaseModel):
     market_value: Decimal = Field(alias="marketValue")
     total_gain: Decimal = Field(alias="totalGain")
     total_gain_pct: Decimal = Field(alias="totalGainPct")
-    days_gain: Decimal | None = Field(default=None, alias="daysGain")
-    days_gain_pct: Decimal | None = Field(default=None, alias="daysGainPct")
+    days_gain: Decimal = Field(alias="daysGain")
+    days_gain_pct: Decimal = Field(alias="daysGainPct")
     position_type: PositionType = Field(alias="positionType")
-    quick: PositionQuick | None = Field(default=None, alias="Quick")
-    date_acquired: datetime | None = Field(default=None, alias="dateAcquired")
+    quick: PositionQuick = Field(alias="Quick")
+    date_acquired: datetime = Field(alias="dateAcquired")
 
-    # Additional position details
-    symbol_description: str | None = Field(default=None, alias="symbolDescription")
-    position_indicator: str | None = Field(default=None, alias="positionIndicator")
-    pct_of_portfolio: Decimal | None = Field(default=None, alias="pctOfPortfolio")
-    price_paid: Decimal | None = Field(default=None, alias="pricePaid")
-    commissions: Decimal | None = Field(default=None)
-    other_fees: Decimal | None = Field(default=None, alias="otherFees")
-    lots_details: str | None = Field(default=None, alias="lotsDetails")
-    quote_details: str | None = Field(default=None, alias="quoteDetails")
+    # Additional position details - all always present
+    symbol_description: str = Field(alias="symbolDescription")
+    position_indicator: str = Field(alias="positionIndicator")
+    pct_of_portfolio: Decimal = Field(alias="pctOfPortfolio")
+    price_paid: Decimal = Field(alias="pricePaid")
+    commissions: Decimal = Field()
+    other_fees: Decimal = Field(alias="otherFees")
+    lots_details: str = Field(alias="lotsDetails")
+    quote_details: str = Field(alias="quoteDetails")
 
-    # Today's activity
-    today_quantity: int | None = Field(default=None, alias="todayQuantity")
-    today_price_paid: Decimal | None = Field(default=None, alias="todayPricePaid")
-    today_commissions: Decimal | None = Field(default=None, alias="todayCommissions")
-    today_fees: Decimal | None = Field(default=None, alias="todayFees")
+    # Today's activity - all always present
+    today_quantity: int = Field(alias="todayQuantity")
+    today_price_paid: Decimal = Field(alias="todayPricePaid")
+    today_commissions: Decimal = Field(alias="todayCommissions")
+    today_fees: Decimal = Field(alias="todayFees")
 
     model_config = {"populate_by_name": True}
 

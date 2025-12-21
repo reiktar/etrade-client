@@ -35,19 +35,24 @@ class TransactionBrokerage(BaseModel):
 class Transaction(BaseModel):
     """A single transaction."""
 
+    # Always present fields
     transaction_id: str = Field(alias="transactionId")
-    account_id: str | None = Field(default=None, alias="accountId")
+    account_id: str = Field(alias="accountId")
     transaction_date: datetime = Field(alias="transactionDate")
-    post_date: datetime | None = Field(default=None, alias="postDate")
+    post_date: datetime = Field(alias="postDate")
     amount: Decimal
-    description: str | None = Field(default=None)
+    description: str = Field()
+    transaction_type: str = Field(alias="transactionType")
+    memo: str = Field()
+    image_flag: bool = Field(alias="imageFlag")
+    store_id: int = Field(alias="storeId")
+    brokerage: TransactionBrokerage = Field(alias="Brokerage")
+
+    # Sometimes present
     description2: str | None = Field(default=None)
-    transaction_type: str | None = Field(default=None, alias="transactionType")
-    memo: str | None = Field(default=None)
-    image_flag: bool | None = Field(default=None, alias="imageFlag")
-    store_id: int | None = Field(default=None, alias="storeId")
+
+    # Context-specific (may not always be present)
     category: dict | None = Field(default=None, alias="Category")
-    brokerage: TransactionBrokerage | None = Field(default=None, alias="Brokerage")
 
     model_config = {"populate_by_name": True}
 

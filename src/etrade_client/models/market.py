@@ -3,8 +3,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class QuoteStatus(StrEnum):
@@ -120,12 +121,15 @@ class QuoteProduct(BaseModel):
 class Quote(BaseModel):
     """Stock quote with all available data."""
 
+    # symbol is extracted from Product during parsing
     symbol: str
-    quote_status: QuoteStatus | None = Field(default=None, alias="quoteStatus")
-    date_time: str | None = Field(default=None, alias="dateTime")
-    date_time_utc: int | None = Field(default=None, alias="dateTimeUTC")
-    ah_flag: str | None = Field(default=None, alias="ahFlag")
-    product: QuoteProduct | None = Field(default=None, alias="Product")
+    # Always present fields
+    quote_status: QuoteStatus = Field(alias="quoteStatus")
+    date_time: str = Field(alias="dateTime")
+    date_time_utc: int = Field(alias="dateTimeUTC")
+    ah_flag: str = Field(alias="ahFlag")
+    product: QuoteProduct = Field(alias="Product")
+    # May not be present depending on detail level requested
     all_data: AllQuoteDetails | None = Field(default=None, alias="All")
 
     # Flattened common fields for convenience
@@ -197,44 +201,56 @@ class OptionGreeks(BaseModel):
 class OptionDetails(BaseModel):
     """Individual option contract details."""
 
-    # Core option identifiers
+    # Core option identifiers - always present
     symbol: str = Field(alias="optionSymbol")
     option_type: OptionType = Field(alias="optionType")
     strike_price: Decimal = Field(alias="strikePrice")
-    expiry_date: date | None = Field(default=None, alias="expiryDate")
 
-    # Display and symbol info
-    display_symbol: str | None = Field(default=None, alias="displaySymbol")
-    option_root_symbol: str | None = Field(default=None, alias="optionRootSymbol")
-    osi_key: str | None = Field(default=None, alias="osiKey")
-    option_category: str | None = Field(default=None, alias="optionCategory")
-    quote_detail: str | None = Field(default=None, alias="quoteDetail")
+    # Display and symbol info - always present
+    display_symbol: str = Field(alias="displaySymbol")
+    option_root_symbol: str = Field(alias="optionRootSymbol")
+    osi_key: str = Field(alias="osiKey")
+    option_category: str = Field(alias="optionCategory")
+    quote_detail: str = Field(alias="quoteDetail")
 
-    # Pricing
-    bid: Decimal | None = Field(default=None)
-    ask: Decimal | None = Field(default=None)
-    bid_size: int | None = Field(default=None, alias="bidSize")
-    ask_size: int | None = Field(default=None, alias="askSize")
-    last_price: Decimal | None = Field(default=None, alias="lastPrice")
-    net_change: Decimal | None = Field(default=None, alias="netChange")
+    # Pricing - always present
+    bid: Decimal = Field()
+    ask: Decimal = Field()
+    bid_size: int = Field(alias="bidSize")
+    ask_size: int = Field(alias="askSize")
+    last_price: Decimal = Field(alias="lastPrice")
+    net_change: Decimal = Field(alias="netChange")
 
-    # Volume and interest
-    volume: int | None = Field(default=None)
-    open_interest: int | None = Field(default=None, alias="openInterest")
+    # Volume and interest - always present
+    volume: int = Field()
+    open_interest: int = Field(alias="openInterest")
 
-    # Greeks (can be inline or nested)
+    # Greeks - always present as nested object
+    option_greeks: OptionGreeks = Field(alias="OptionGreeks")
+
+    # Status flags - always present
+    in_the_money: bool = Field(alias="inTheMoney")
+    adjusted_flag: bool = Field(alias="adjustedFlag")
+    time_stamp: int = Field(alias="timeStamp")
+
+    @field_validator("in_the_money", mode="before")
+    @classmethod
+    def parse_in_the_money(cls, v: Any) -> bool:
+        """Convert API's 'y'/'n' strings to boolean."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower() in ("y", "yes", "true", "1")
+        return bool(v)
+
+    # Deprecated/legacy inline greeks - never present in current API
     implied_volatility: Decimal | None = Field(default=None, alias="impliedVolatility")
     delta: Decimal | None = Field(default=None)
     gamma: Decimal | None = Field(default=None)
     theta: Decimal | None = Field(default=None)
     vega: Decimal | None = Field(default=None)
     rho: Decimal | None = Field(default=None)
-    option_greeks: OptionGreeks | None = Field(default=None, alias="OptionGreeks")
-
-    # Status flags
-    in_the_money: bool | None = Field(default=None, alias="inTheMoney")
-    adjusted_flag: bool | None = Field(default=None, alias="adjustedFlag")
-    time_stamp: int | None = Field(default=None, alias="timeStamp")
+    expiry_date: date | None = Field(default=None, alias="expiryDate")
 
     model_config = {"populate_by_name": True}
 

@@ -16,6 +16,65 @@ from etrade_client.models.market import (
 )
 
 
+def _complete_quote_data(**overrides) -> dict:
+    """Helper to create complete quote test data with all required fields."""
+    base = {
+        "symbol": "AAPL",
+        "quoteStatus": "REALTIME",
+        "dateTime": "2025-01-15 10:30:00 EST",
+        "dateTimeUTC": 1705318200,
+        "ahFlag": "false",
+        "Product": {"symbol": "AAPL", "securityType": "EQ"},
+        "All": {
+            "lastTrade": "175.50",
+            "change": "2.50",
+            "changePct": "1.44",
+            "previousClose": "173.00",
+            "high": "176.00",
+            "low": "172.00",
+            "open": "173.50",
+            "totalVolume": 50000000,
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def _complete_option_details_data(**overrides) -> dict:
+    """Helper to create complete option details test data with all required fields."""
+    base = {
+        "optionSymbol": "AAPL250117C00150000",
+        "optionType": "CALL",
+        "strikePrice": "150.00",
+        "displaySymbol": "AAPL Jan 17 2025 150.00 Call",
+        "optionRootSymbol": "AAPL",
+        "osiKey": "AAPL  250117C00150000",
+        "optionCategory": "STANDARD",
+        "quoteDetail": "NBBO",
+        "bid": "28.00",
+        "ask": "28.50",
+        "bidSize": 100,
+        "askSize": 200,
+        "lastPrice": "28.25",
+        "netChange": "1.50",
+        "volume": 5000,
+        "openInterest": 15000,
+        "OptionGreeks": {
+            "delta": "0.85",
+            "gamma": "0.02",
+            "theta": "-0.15",
+            "vega": "0.25",
+            "rho": "0.10",
+            "iv": "0.35",
+        },
+        "inTheMoney": "Y",
+        "adjustedFlag": False,
+        "timeStamp": 1705318200,
+    }
+    base.update(overrides)
+    return base
+
+
 class TestQuoteResponse:
     """Tests for QuoteResponse.from_api_response."""
 
@@ -24,10 +83,10 @@ class TestQuoteResponse:
         data = {
             "QuoteResponse": {
                 "QuoteData": [
-                    {
-                        "Product": {"symbol": "AAPL", "securityType": "EQ"},
-                        "quoteStatus": "REALTIME",
-                        "All": {
+                    _complete_quote_data(
+                        symbol="AAPL",
+                        Product={"symbol": "AAPL", "securityType": "EQ"},
+                        All={
                             "lastTrade": "175.50",
                             "change": "2.50",
                             "changePct": "1.44",
@@ -37,11 +96,11 @@ class TestQuoteResponse:
                             "open": "173.50",
                             "totalVolume": 50000000,
                         },
-                    },
-                    {
-                        "Product": {"symbol": "MSFT", "securityType": "EQ"},
-                        "quoteStatus": "REALTIME",
-                        "All": {
+                    ),
+                    _complete_quote_data(
+                        symbol="MSFT",
+                        Product={"symbol": "MSFT", "securityType": "EQ"},
+                        All={
                             "lastTrade": "420.00",
                             "change": "-5.00",
                             "changePct": "-1.18",
@@ -51,7 +110,7 @@ class TestQuoteResponse:
                             "open": "425.50",
                             "totalVolume": 25000000,
                         },
-                    },
+                    ),
                 ]
             }
         }
@@ -69,10 +128,11 @@ class TestQuoteResponse:
         """Should handle E*Trade's single-item-as-dict quirk."""
         data = {
             "QuoteResponse": {
-                "QuoteData": {
-                    "Product": {"symbol": "GOOG", "securityType": "EQ"},
-                    "quoteStatus": "DELAYED",
-                    "All": {
+                "QuoteData": _complete_quote_data(
+                    symbol="GOOG",
+                    Product={"symbol": "GOOG", "securityType": "EQ"},
+                    quoteStatus="DELAYED",
+                    All={
                         "lastTrade": "140.00",
                         "previousClose": "139.00",
                         "high": "141.00",
@@ -80,7 +140,7 @@ class TestQuoteResponse:
                         "open": "139.50",
                         "totalVolume": 10000000,
                     },
-                }
+                )
             }
         }
 
@@ -111,10 +171,9 @@ class TestQuote:
 
     def test_convenience_properties(self) -> None:
         """Should provide convenience properties from all_data."""
-        data = {
-            "symbol": "AAPL",
-            "quoteStatus": "REALTIME",
-            "All": {
+        data = _complete_quote_data(
+            symbol="AAPL",
+            All={
                 "lastTrade": "175.50",
                 "change": "2.50",
                 "changePct": "1.44",
@@ -124,7 +183,7 @@ class TestQuote:
                 "open": "173.50",
                 "totalVolume": 50000000,
             },
-        }
+        )
 
         quote = Quote.model_validate(data)
 
@@ -135,7 +194,9 @@ class TestQuote:
 
     def test_convenience_properties_none_without_all_data(self) -> None:
         """Should return None when all_data is missing."""
-        data = {"symbol": "AAPL", "quoteStatus": "REALTIME"}
+        data = _complete_quote_data(symbol="AAPL", All=None)
+        # Remove All key to test None case
+        del data["All"]
 
         quote = Quote.model_validate(data)
 
@@ -228,48 +289,46 @@ class TestOptionChain:
             "OptionChainResponse": {
                 "OptionPair": [
                     {
-                        "Call": {
-                            "optionSymbol": "AAPL250117C00145000",
-                            "optionType": "CALL",
-                            "strikePrice": "145.00",
-                            "expiryDate": "2025-01-17",
-                            "bid": "32.50",
-                            "ask": "33.00",
-                            "lastPrice": "32.75",
-                            "volume": 1500,
-                            "openInterest": 5000,
-                            "inTheMoney": True,
-                        },
-                        "Put": {
-                            "optionSymbol": "AAPL250117P00145000",
-                            "optionType": "PUT",
-                            "strikePrice": "145.00",
-                            "expiryDate": "2025-01-17",
-                            "bid": "1.20",
-                            "ask": "1.35",
-                            "lastPrice": "1.25",
-                            "volume": 800,
-                            "openInterest": 3000,
-                            "inTheMoney": False,
-                        },
+                        "Call": _complete_option_details_data(
+                            optionSymbol="AAPL250117C00145000",
+                            strikePrice="145.00",
+                            displaySymbol="AAPL Jan 17 2025 145.00 Call",
+                            bid="32.50",
+                            ask="33.00",
+                            lastPrice="32.75",
+                            volume=1500,
+                            openInterest=5000,
+                            inTheMoney="Y",
+                        ),
+                        "Put": _complete_option_details_data(
+                            optionSymbol="AAPL250117P00145000",
+                            optionType="PUT",
+                            strikePrice="145.00",
+                            displaySymbol="AAPL Jan 17 2025 145.00 Put",
+                            bid="1.20",
+                            ask="1.35",
+                            lastPrice="1.25",
+                            volume=800,
+                            openInterest=3000,
+                            inTheMoney="N",
+                        ),
                     },
                     {
-                        "Call": {
-                            "optionSymbol": "AAPL250117C00150000",
-                            "optionType": "CALL",
-                            "strikePrice": "150.00",
-                            "expiryDate": "2025-01-17",
-                            "bid": "28.00",
-                            "ask": "28.50",
-                        },
-                        "Put": {
-                            "optionSymbol": "AAPL250117P00150000",
-                            "optionType": "PUT",
-                            "strikePrice": "150.00",
-                            "expiryDate": "2025-01-17",
-                            "bid": "2.50",
-                            "ask": "2.75",
-                        },
+                        "Call": _complete_option_details_data(
+                            optionSymbol="AAPL250117C00150000",
+                            strikePrice="150.00",
+                            displaySymbol="AAPL Jan 17 2025 150.00 Call",
+                            bid="28.00",
+                            ask="28.50",
+                        ),
+                        "Put": _complete_option_details_data(
+                            optionSymbol="AAPL250117P00150000",
+                            optionType="PUT",
+                            strikePrice="150.00",
+                            displaySymbol="AAPL Jan 17 2025 150.00 Put",
+                            bid="2.50",
+                            ask="2.75",
+                        ),
                     },
                 ]
             }
@@ -294,18 +353,15 @@ class TestOptionChain:
         data = {
             "OptionChainResponse": {
                 "OptionPair": {
-                    "Call": {
-                        "optionSymbol": "AAPL250117C00150000",
-                        "optionType": "CALL",
-                        "strikePrice": "150.00",
-                        "expiryDate": "2025-01-17",
-                    },
-                    "Put": {
-                        "optionSymbol": "AAPL250117P00150000",
-                        "optionType": "PUT",
-                        "strikePrice": "150.00",
-                        "expiryDate": "2025-01-17",
-                    },
+                    "Call": _complete_option_details_data(
+                        optionSymbol="AAPL250117C00150000",
+                        strikePrice="150.00",
+                    ),
+                    "Put": _complete_option_details_data(
+                        optionSymbol="AAPL250117P00150000",
+                        optionType="PUT",
+                        strikePrice="150.00",
+                    ),
                 }
             }
         }
@@ -389,50 +445,35 @@ class TestOptionDetails:
 
     def test_parses_complete_option_details(self) -> None:
         """Should parse option with all Greek values."""
-        data = {
-            "optionSymbol": "AAPL250117C00150000",
-            "optionType": "CALL",
-            "strikePrice": "150.00",
-            "expiryDate": "2025-01-17",
-            "bid": "28.00",
-            "ask": "28.50",
-            "lastPrice": "28.25",
-            "volume": 5000,
-            "openInterest": 15000,
-            "impliedVolatility": "0.35",
-            "delta": "0.85",
-            "gamma": "0.02",
-            "theta": "-0.15",
-            "vega": "0.25",
-            "rho": "0.10",
-            "inTheMoney": True,
-        }
+        data = _complete_option_details_data(
+            inTheMoney="Y",
+        )
 
         option = OptionDetails.model_validate(data)
 
         assert option.symbol == "AAPL250117C00150000"
         assert option.option_type == "CALL"
         assert option.strike_price == Decimal("150.00")
-        assert option.delta == Decimal("0.85")
-        assert option.gamma == Decimal("0.02")
-        assert option.theta == Decimal("-0.15")
+        assert option.option_greeks.delta == Decimal("0.85")
+        assert option.option_greeks.gamma == Decimal("0.02")
+        assert option.option_greeks.theta == Decimal("-0.15")
         assert option.in_the_money is True
 
-    def test_parses_minimal_option_details(self) -> None:
-        """Should parse option with only required fields."""
-        data = {
-            "optionSymbol": "AAPL250117C00150000",
-            "optionType": "CALL",
-            "strikePrice": "150.00",
-            "expiryDate": "2025-01-17",
-        }
+    def test_parses_with_out_of_the_money(self) -> None:
+        """Should parse option that is out of the money."""
+        data = _complete_option_details_data(inTheMoney="N")
 
         option = OptionDetails.model_validate(data)
 
-        assert option.symbol == "AAPL250117C00150000"
-        assert option.bid is None
-        assert option.delta is None
-        assert option.in_the_money is None
+        assert option.in_the_money is False
+
+    def test_in_the_money_accepts_boolean(self) -> None:
+        """Should accept boolean values for in_the_money."""
+        data = _complete_option_details_data(inTheMoney=True)
+
+        option = OptionDetails.model_validate(data)
+
+        assert option.in_the_money is True
 
 
 class TestOptionPair:
@@ -441,18 +482,16 @@ class TestOptionPair:
     def test_parses_both_call_and_put(self) -> None:
         """Should parse pair with both call and put."""
         data = {
-            "Call": {
-                "optionSymbol": "AAPL250117C00150000",
-                "optionType": "CALL",
-                "strikePrice": "150.00",
-                "expiryDate": "2025-01-17",
-            },
-            "Put": {
-                "optionSymbol": "AAPL250117P00150000",
-                "optionType": "PUT",
-                "strikePrice": "150.00",
-                "expiryDate": "2025-01-17",
-            },
+            "Call": _complete_option_details_data(
+                optionSymbol="AAPL250117C00150000",
+                optionType="CALL",
+                strikePrice="150.00",
+            ),
+            "Put": _complete_option_details_data(
+                optionSymbol="AAPL250117P00150000",
+                optionType="PUT",
+                strikePrice="150.00",
+            ),
         }
 
         pair = OptionPair.model_validate(data)
@@ -465,12 +504,11 @@ class TestOptionPair:
     def test_parses_call_only(self) -> None:
         """Should handle pair with only call option."""
         data = {
-            "Call": {
-                "optionSymbol": "AAPL250117C00150000",
-                "optionType": "CALL",
-                "strikePrice": "150.00",
-                "expiryDate": "2025-01-17",
-            }
+            "Call": _complete_option_details_data(
+                optionSymbol="AAPL250117C00150000",
+                optionType="CALL",
+                strikePrice="150.00",
+            )
         }
 
         pair = OptionPair.model_validate(data)
@@ -481,12 +519,11 @@ class TestOptionPair:
     def test_parses_put_only(self) -> None:
         """Should handle pair with only put option."""
         data = {
-            "Put": {
-                "optionSymbol": "AAPL250117P00150000",
-                "optionType": "PUT",
-                "strikePrice": "150.00",
-                "expiryDate": "2025-01-17",
-            }
+            "Put": _complete_option_details_data(
+                optionSymbol="AAPL250117P00150000",
+                optionType="PUT",
+                strikePrice="150.00",
+            )
         }
 
         pair = OptionPair.model_validate(data)

@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.integration.field_analyzer import FieldAnalysisCollector
+from tests.integration.field_analyzer import FieldAnalysisCollector, FieldPresenceAnalyzer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -61,8 +61,9 @@ INTEGRATION_TOKEN_PATH = Path(__file__).parent / ".tokens.json"
 # Field Analysis Infrastructure
 # =============================================================================
 
-# Session-scoped collector
+# Session-scoped collectors
 _collector: FieldAnalysisCollector | None = None
+_presence_analyzer: FieldPresenceAnalyzer | None = None
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -71,12 +72,17 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "no_field_analysis: Disable field analysis for this test",
     )
+    config.addinivalue_line(
+        "markers",
+        "nullability_analysis: Run nullability analysis for this test",
+    )
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
     """Initialize field analysis collector at session start."""
-    global _collector
+    global _collector, _presence_analyzer
     _collector = FieldAnalysisCollector()
+    _presence_analyzer = FieldPresenceAnalyzer()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
@@ -87,6 +93,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         print(_collector.get_summary())
         print("=" * 70)
 
+    # Print presence analysis if we have data
+    if _presence_analyzer and _presence_analyzer._stats:
+        print("\n")
+        print(_presence_analyzer.get_summary())
+
 
 @pytest.fixture(scope="session")
 def field_collector() -> FieldAnalysisCollector:
@@ -95,6 +106,15 @@ def field_collector() -> FieldAnalysisCollector:
     if _collector is None:
         _collector = FieldAnalysisCollector()
     return _collector
+
+
+@pytest.fixture(scope="session")
+def presence_analyzer() -> FieldPresenceAnalyzer:
+    """Get the field presence analyzer."""
+    global _presence_analyzer
+    if _presence_analyzer is None:
+        _presence_analyzer = FieldPresenceAnalyzer()
+    return _presence_analyzer
 
 
 # =============================================================================
