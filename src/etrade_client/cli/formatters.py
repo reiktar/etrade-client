@@ -4,7 +4,7 @@ import csv
 import io
 import json
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 from rich.console import Console
@@ -36,7 +36,7 @@ def format_output(
     if isinstance(data, BaseModel):
         converted = [data.model_dump(by_alias=True, exclude_none=True)]
     elif isinstance(data, dict):
-        converted = [data]
+        converted = [cast(dict[str, Any], data)]
     elif isinstance(data, Sequence) and not isinstance(data, str):
         converted = [
             item.model_dump(by_alias=True, exclude_none=True)
