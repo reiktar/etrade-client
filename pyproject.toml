@@ -14,13 +14,23 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cli = [
+    "typer>=0.15.0",
+    "rich>=13.0",
+]
 dev = [
     "ruff>=0.8.0",
     "ty>=0.0.1a7",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "python-dotenv>=1.0.0",  # Optional: for loading .env.integration
+    # CLI dependencies (included in dev for convenience)
+    "typer>=0.15.0",
+    "rich>=13.0",
 ]
+
+[project.scripts]
+etrade-cli = "etrade_client.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.0,<0.10.0"]
@@ -49,6 +59,11 @@ ignore = [
     "E501",   # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Typer uses function calls in defaults as the standard pattern
+# TC001/TC003: Type annotations are used at runtime in function signatures
+"src/etrade_client/cli/**" = ["B008", "TC001", "TC003"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["etrade_client"]
 
@@ -59,6 +74,10 @@ skip-magic-trailing-comma = false
 
 [tool.ty.environment]
 python-version = "3.14"
+
+[tool.ty.rules]
+# Promote attribute access warnings to errors so they fail CI
+possibly-missing-attribute = "error"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
