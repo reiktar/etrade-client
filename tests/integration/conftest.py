@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from tests.integration.field_analyzer import FieldAnalysisCollector, FieldPresenceAnalyzer
+from tests.integration.endpoint_field_analyzer import EndpointFieldAnalyzer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -64,6 +65,7 @@ INTEGRATION_TOKEN_PATH = Path(__file__).parent / ".tokens.json"
 # Session-scoped collectors
 _collector: FieldAnalysisCollector | None = None
 _presence_analyzer: FieldPresenceAnalyzer | None = None
+_endpoint_analyzer: EndpointFieldAnalyzer | None = None
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -80,9 +82,10 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_sessionstart(session: pytest.Session) -> None:
     """Initialize field analysis collector at session start."""
-    global _collector, _presence_analyzer
+    global _collector, _presence_analyzer, _endpoint_analyzer
     _collector = FieldAnalysisCollector()
     _presence_analyzer = FieldPresenceAnalyzer()
+    _endpoint_analyzer = EndpointFieldAnalyzer()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
@@ -97,6 +100,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if _presence_analyzer and _presence_analyzer._stats:
         print("\n")
         print(_presence_analyzer.get_summary())
+
+    # Print endpoint-aware field analysis
+    if _endpoint_analyzer and _endpoint_analyzer.stats:
+        print("\n")
+        _endpoint_analyzer.print_report()
 
 
 @pytest.fixture(scope="session")
@@ -115,6 +123,15 @@ def presence_analyzer() -> FieldPresenceAnalyzer:
     if _presence_analyzer is None:
         _presence_analyzer = FieldPresenceAnalyzer()
     return _presence_analyzer
+
+
+@pytest.fixture(scope="session")
+def endpoint_analyzer() -> EndpointFieldAnalyzer:
+    """Get the endpoint-aware field analyzer."""
+    global _endpoint_analyzer
+    if _endpoint_analyzer is None:
+        _endpoint_analyzer = EndpointFieldAnalyzer()
+    return _endpoint_analyzer
 
 
 # =============================================================================
