@@ -18,7 +18,14 @@ Command-line interface for E\*Trade API.
 ## Installation
 
 ```bash
-uv add etrade-client
+# Install globally
+uv tool install "git+ssh://git@github.com/reiktar/etrade-client.git"
+
+# Or run directly without installing
+uvx --from "git+ssh://git@github.com/reiktar/etrade-client.git" etrade-cli --help
+
+# Update to latest version
+uv tool upgrade etrade-client
 ```
 
 ## Configuration

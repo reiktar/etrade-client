@@ -18,11 +18,24 @@ A fully typed, async Python client library for E\*Trade's APIs.
 
 ## Installation
 
+### CLI Tool
+
 ```bash
-uv add etrade-client
+# Install globally
+uv tool install "git+ssh://git@github.com/reiktar/etrade-client.git"
+
+# Or run directly without installing
+uvx --from "git+ssh://git@github.com/reiktar/etrade-client.git" etrade-cli --help
+```
+
+### Library
+
+```bash
+# Add to your project
+uv add "git+ssh://git@github.com/reiktar/etrade-client.git"
 
 # Development (includes testing tools)
-uv add etrade-client[dev]
+uv add "git+ssh://git@github.com/reiktar/etrade-client.git[dev]"
 ```
 
 ## Quick Start: Library
