@@ -38,14 +38,24 @@ def _complete_balance_data(**overrides) -> dict:
         "accountDescription": "My Account",
         "optionLevel": "LEVEL_2",
         "Cash": {
+            # Required fields (always present in API)
+            "fundsForOpenOrdersCash": "0.00",
+            "moneyMktBalance": "0.00",
+            # Optional fields (never present in sandbox, but may be in production)
             "cashBalance": "5000.00",
             "cashAvailableForWithdrawal": "4500.00",
             "cashAvailableForInvestment": "4800.00",
         },
         "Computed": {
-            "accountBalance": "150000.00",
-            "marginBuyingPower": "50000.00",
-            "RealTimeAccountValue": "150500.00",
+            # Required fields (always present in API)
+            "cashAvailableForInvestment": "4800.00",
+            "cashAvailableForWithdrawal": "4500.00",
+            "netCash": "5000.00",
+            "cashBalance": "5000.00",
+            "settledCashForInvestment": "4800.00",
+            "unSettledCashForInvestment": "0.00",
+            "fundsWithheldFromPurchasePower": "0.00",
+            "fundsWithheldFromWithdrawal": "0.00",
             "OpenCalls": {
                 "minEquityCall": "0.00",
                 "fedCall": "0.00",
@@ -58,6 +68,10 @@ def _complete_balance_data(**overrides) -> dict:
                 "netMvLong": "145000.00",
                 "netMvShort": "0.00",
             },
+            # Optional fields (never present in sandbox)
+            "accountBalance": "150000.00",
+            "marginBuyingPower": "50000.00",
+            "RealTimeAccountValue": "150500.00",
         },
     }
     base.update(overrides)

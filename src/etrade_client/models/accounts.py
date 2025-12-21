@@ -71,21 +71,22 @@ class AccountListResponse(BaseModel):
 class CashBalance(BaseModel):
     """Cash balance details."""
 
-    funds_for_open_orders_cash: Decimal = Field(
-        default=Decimal("0"), alias="fundsForOpenOrdersCash"
+    # Always present in API responses
+    funds_for_open_orders_cash: Decimal = Field(alias="fundsForOpenOrdersCash")
+    money_market_balance: Decimal = Field(alias="moneyMktBalance")
+
+    # Never present in sandbox - use None to avoid implying balance is 0
+    cash_available_for_investment: Decimal | None = Field(
+        default=None, alias="cashAvailableForInvestment"
     )
-    money_market_balance: Decimal = Field(default=Decimal("0"), alias="moneyMktBalance")
-    cash_available_for_investment: Decimal = Field(
-        default=Decimal("0"), alias="cashAvailableForInvestment"
+    cash_available_for_withdrawal: Decimal | None = Field(
+        default=None, alias="cashAvailableForWithdrawal"
     )
-    cash_available_for_withdrawal: Decimal = Field(
-        default=Decimal("0"), alias="cashAvailableForWithdrawal"
+    cash_balance: Decimal | None = Field(default=None, alias="cashBalance")
+    settled_cash_for_investment: Decimal | None = Field(
+        default=None, alias="settledCashForInvestment"
     )
-    cash_balance: Decimal = Field(default=Decimal("0"), alias="cashBalance")
-    settled_cash_for_investment: Decimal = Field(
-        default=Decimal("0"), alias="settledCashForInvestment"
-    )
-    uncleared_deposits: Decimal = Field(default=Decimal("0"), alias="unclearedDeposits")
+    uncleared_deposits: Decimal | None = Field(default=None, alias="unclearedDeposits")
 
     model_config = {"populate_by_name": True}
 
@@ -116,35 +117,28 @@ class RealTimeValues(BaseModel):
 class ComputedBalance(BaseModel):
     """Computed account balance values."""
 
-    account_balance: Decimal = Field(default=Decimal("0"), alias="accountBalance")
-    cash_available_for_investment: Decimal = Field(
-        default=Decimal("0"), alias="cashAvailableForInvestment"
-    )
-    cash_available_for_withdrawal: Decimal = Field(
-        default=Decimal("0"), alias="cashAvailableForWithdrawal"
-    )
-    net_cash: Decimal = Field(default=Decimal("0"), alias="netCash")
-    cash_balance: Decimal = Field(default=Decimal("0"), alias="cashBalance")
-    margin_buying_power: Decimal = Field(default=Decimal("0"), alias="marginBuyingPower")
-    real_time_account_value: Decimal = Field(default=Decimal("0"), alias="RealTimeAccountValue")
-
-    # Additional computed fields
-    settled_cash_for_investment: Decimal = Field(
-        default=Decimal("0"), alias="settledCashForInvestment"
-    )
-    un_settled_cash_for_investment: Decimal = Field(
-        default=Decimal("0"), alias="unSettledCashForInvestment"
-    )
+    # Always present in API responses
+    cash_available_for_investment: Decimal = Field(alias="cashAvailableForInvestment")
+    cash_available_for_withdrawal: Decimal = Field(alias="cashAvailableForWithdrawal")
+    net_cash: Decimal = Field(alias="netCash")
+    cash_balance: Decimal = Field(alias="cashBalance")
+    settled_cash_for_investment: Decimal = Field(alias="settledCashForInvestment")
+    un_settled_cash_for_investment: Decimal = Field(alias="unSettledCashForInvestment")
     funds_withheld_from_purchase_power: Decimal = Field(
-        default=Decimal("0"), alias="fundsWithheldFromPurchasePower"
+        alias="fundsWithheldFromPurchasePower"
     )
-    funds_withheld_from_withdrawal: Decimal = Field(
-        default=Decimal("0"), alias="fundsWithheldFromWithdrawal"
-    )
+    funds_withheld_from_withdrawal: Decimal = Field(alias="fundsWithheldFromWithdrawal")
 
     # Nested objects - always present in API responses
     open_calls: OpenCalls = Field(alias="OpenCalls")
     real_time_values: RealTimeValues = Field(alias="RealTimeValues")
+
+    # Never present in sandbox - use None to avoid implying balance is 0
+    account_balance: Decimal | None = Field(default=None, alias="accountBalance")
+    margin_buying_power: Decimal | None = Field(default=None, alias="marginBuyingPower")
+    real_time_account_value: Decimal | None = Field(
+        default=None, alias="RealTimeAccountValue"
+    )
 
     model_config = {"populate_by_name": True}
 
