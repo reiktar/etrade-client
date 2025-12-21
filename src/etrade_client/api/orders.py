@@ -26,7 +26,7 @@ class OrdersAPI(BaseAPI):
         account_id_key: str,
         *,
         marker: str | None = None,
-        count: int = 25,
+        count: int | None = None,
         status: str
         | None = None,  # "OPEN", "EXECUTED", "CANCELLED", "INDIVIDUAL_FILLS", "CANCEL_REQUESTED", "EXPIRED", "REJECTED"
         from_date: date | None = None,
@@ -53,7 +53,7 @@ class OrdersAPI(BaseAPI):
         Returns:
             OrderListResponse with orders
         """
-        params: dict[str, Any] = {"count": min(count, 100)}
+        params: dict[str, Any] = {"count": min(count, 100) if count else 100}
 
         if marker:
             params["marker"] = marker
@@ -79,7 +79,7 @@ class OrdersAPI(BaseAPI):
         self,
         account_id_key: str,
         *,
-        count: int = 25,
+        count: int = 100,
         status: str | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
@@ -116,7 +116,7 @@ class OrdersAPI(BaseAPI):
         self,
         account_id_key: str,
         *,
-        count: int = 25,
+        count: int = 100,
         status: str | None = None,
         from_date: date | None = None,
         to_date: date | None = None,

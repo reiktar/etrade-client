@@ -21,7 +21,7 @@ class AlertsAPI(BaseAPI):
     async def list_alerts(
         self,
         *,
-        count: int = 25,
+        count: int | None = None,
         category: str | None = None,
         status: str | None = None,
         direction: str = "DESC",
@@ -39,7 +39,7 @@ class AlertsAPI(BaseAPI):
         Returns:
             AlertListResponse with list of alerts
         """
-        params: dict[str, Any] = {"count": min(count, 300)}
+        params: dict[str, Any] = {"count": min(count, 300) if count else 300}
 
         if category:
             params["category"] = category
