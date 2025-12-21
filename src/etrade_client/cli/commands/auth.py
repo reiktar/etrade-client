@@ -30,18 +30,28 @@ async def login(
     1. Opens browser for E*Trade login
     2. Prompts for verification code
     3. Saves access token for future use
+
+    Credentials are loaded from:
+    1. Config file (~/.config/etrade-cli/{sandbox,production}.json)
+    2. Environment variables (override file values)
     """
     config: CLIConfig = ctx.obj
 
     try:
-        etrade_config = ETradeConfig.load(sandbox=config.sandbox)
-    except (ValueError, FileNotFoundError) as e:
+        consumer_key, consumer_secret = config.load_credentials()
+    except ValueError as e:
         print_error(str(e))
-        print_info("Set ETRADE_CONSUMER_KEY and ETRADE_CONSUMER_SECRET environment variables")
-        print_info("Or create a config file at ~/.config/etrade-client/config.json")
+        print_info(f"Create config file at: {config.credentials_path}")
+        print_info("Or set ETRADE_CONSUMER_KEY and ETRADE_CONSUMER_SECRET environment variables")
         raise typer.Exit(1) from None
 
-    # Import here to avoid circular imports
+    # Create ETradeConfig and auth
+    etrade_config = ETradeConfig(
+        consumer_key=consumer_key,
+        consumer_secret=consumer_secret,
+        sandbox=config.sandbox,
+    )
+
     from etrade_client.auth import ETradeAuth
 
     auth = ETradeAuth(etrade_config)
@@ -68,28 +78,40 @@ async def login(
     print_info("Exchanging verification code for access token...")
     access_token = await auth.get_access_token(verifier.strip())
 
-    # Step 5: Save token
+    # Step 5: Save token to data directory
     token_store = TokenStore(path=config.token_path)
     token_store.save(access_token)
 
-    print_success(f"Authenticated successfully! Token saved to {config.token_path}")
+    print_success("Authenticated successfully!")
+    print_info(f"Token saved to: {config.token_path}")
 
 
 @app.command("status")
 def status(ctx: typer.Context) -> None:
-    """Check authentication status."""
+    """Check authentication status and configuration paths."""
     config: CLIConfig = ctx.obj
 
     token_store = TokenStore(path=config.token_path)
 
     console.print(f"Environment: [bold]{config.environment}[/bold]")
-    console.print(f"Token path: {config.token_path}")
+    console.print()
+    console.print("[dim]Configuration:[/dim]")
+    console.print(f"  Credentials: {config.credentials_path}")
+    console.print(f"  Token: {config.token_path}")
+    console.print()
 
+    # Check credentials
+    if config.has_credentials():
+        print_success("Credentials found")
+    else:
+        print_info(f"No credentials - create {config.credentials_path} or set env vars")
+
+    # Check token
     if token_store.has_token():
         print_success("Token found - you are authenticated")
         print_info("Note: Tokens expire at midnight US Eastern time")
     else:
-        print_info("Not authenticated - run 'etrade-cli auth login' to authenticate")
+        print_info("No token - run 'etrade-cli auth login' to authenticate")
 
 
 @app.command("renew")
@@ -148,3 +170,23 @@ async def logout(
 
     token_store.clear()
     print_success(f"Logged out from {config.environment}.")
+
+
+@app.command("paths")
+def paths(ctx: typer.Context) -> None:
+    """Show configuration and data paths for current environment."""
+    config: CLIConfig = ctx.obj
+
+    console.print(f"[bold]Environment:[/bold] {config.environment}")
+    console.print()
+    console.print("[bold]Configuration (credentials):[/bold]")
+    console.print(f"  Directory: {config.config_dir}")
+    console.print(f"  File: {config.credentials_path}")
+    exists = "[green]exists[/green]" if config.credentials_path.exists() else "[dim]not found[/dim]"
+    console.print(f"  Status: {exists}")
+    console.print()
+    console.print("[bold]Data (tokens):[/bold]")
+    console.print(f"  Directory: {config.data_dir}")
+    console.print(f"  File: {config.token_path}")
+    exists = "[green]exists[/green]" if config.token_path.exists() else "[dim]not found[/dim]"
+    console.print(f"  Status: {exists}")

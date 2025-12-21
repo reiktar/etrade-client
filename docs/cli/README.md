@@ -23,22 +23,67 @@ uv add etrade-client[cli]
 
 ## Configuration
 
-### Environment Variables
+The CLI uses XDG-compliant directories with environment-specific configuration:
 
-```bash
-export ETRADE_CONSUMER_KEY="your_consumer_key"
-export ETRADE_CONSUMER_SECRET="your_consumer_secret"
+### Directory Structure
+
+```
+~/.config/etrade-cli/              # Credentials (XDG_CONFIG_HOME)
+├── sandbox.json                   # Sandbox credentials
+└── production.json                # Production credentials
+
+~/.local/share/etrade-cli/         # Tokens (XDG_DATA_HOME)
+├── sandbox-token.json             # Sandbox OAuth token
+└── production-token.json          # Production OAuth token
 ```
 
-### Config File
+### Config Files
 
-Create `~/.config/etrade-cli/config.json`:
+Create environment-specific credential files:
 
+**Sandbox** (`~/.config/etrade-cli/sandbox.json`):
 ```json
 {
-    "consumer_key": "your_consumer_key",
-    "consumer_secret": "your_consumer_secret"
+    "consumer_key": "your_sandbox_key",
+    "consumer_secret": "your_sandbox_secret"
 }
+```
+
+**Production** (`~/.config/etrade-cli/production.json`):
+```json
+{
+    "consumer_key": "your_production_key",
+    "consumer_secret": "your_production_secret"
+}
+```
+
+### Environment Variables
+
+Environment variables override config file values:
+
+```bash
+export ETRADE_CONSUMER_KEY="override_key"
+export ETRADE_CONSUMER_SECRET="override_secret"
+```
+
+This is useful for:
+- CI/CD pipelines
+- Testing with different credentials
+- Temporary overrides without modifying files
+
+### Loading Priority
+
+1. Load from environment-specific config file (`sandbox.json` or `production.json`)
+2. Override individual values with environment variables (if set)
+
+### View Current Paths
+
+```bash
+# Show paths for current environment
+etrade-cli auth paths
+
+# Show paths for production
+etrade-cli --production auth paths
 ```
 
 ## Global Options
@@ -51,8 +96,10 @@ Options:
                         Use sandbox (default) or production environment
                         [env var: ETRADE_SANDBOX]
   -v, --verbose         Enable verbose output
-  -c, --config-dir PATH Config directory
+  -c, --config-dir PATH Config directory for credentials
                         [env var: ETRADE_CLI_CONFIG_DIR]
+  -d, --data-dir PATH   Data directory for tokens
+                        [env var: ETRADE_CLI_DATA_DIR]
   --help                Show this message and exit
 ```
 
@@ -65,8 +112,8 @@ etrade-cli accounts list
 # Use production
 etrade-cli --production accounts list
 
-# Custom config directory
-etrade-cli --config-dir /path/to/config accounts list
+# Custom directories
+etrade-cli --config-dir /path/to/config --data-dir /path/to/data accounts list
 ```
 
 ---
@@ -137,6 +184,29 @@ etrade-cli auth logout
 
 # Only clear local token
 etrade-cli auth logout --no-revoke
+```
+
+### auth paths
+
+Show configuration and data paths for current environment.
+
+```bash
+etrade-cli auth paths
+```
+
+**Output:**
+```
+Environment: sandbox
+
+Configuration (credentials):
+  Directory: /home/user/.config/etrade-cli
+  File: /home/user/.config/etrade-cli/sandbox.json
+  Status: exists
+
+Data (tokens):
+  Directory: /home/user/.local/share/etrade-cli
+  File: /home/user/.local/share/etrade-cli/sandbox-token.json
+  Status: exists
 ```
 
 ---

@@ -64,9 +64,14 @@ asyncio.run(main())
 ## Quick Start: CLI
 
 ```bash
-# Configure credentials
-export ETRADE_CONSUMER_KEY="your_key"
-export ETRADE_CONSUMER_SECRET="your_secret"
+# Create config file for sandbox
+mkdir -p ~/.config/etrade-cli
+cat > ~/.config/etrade-cli/sandbox.json << 'EOF'
+{
+    "consumer_key": "your_sandbox_key",
+    "consumer_secret": "your_sandbox_secret"
+}
+EOF
 
 # Authenticate
 etrade-cli auth login
@@ -86,16 +91,14 @@ etrade-cli orders list <account-id>
 
 ## Configuration
 
-### Environment Variables
+### Library
 
 ```bash
 export ETRADE_CONSUMER_KEY="your_consumer_key"
 export ETRADE_CONSUMER_SECRET="your_consumer_secret"
 ```
 
-### Config File
-
-Create `~/.config/etrade-client/config.json`:
+Or create `~/.config/etrade-client/config.json`:
 
 ```json
 {
@@ -103,6 +106,17 @@ Create `~/.config/etrade-client/config.json`:
     "consumer_secret": "your_consumer_secret"
 }
 ```
+
+### CLI
+
+The CLI uses environment-specific config files:
+
+```
+~/.config/etrade-cli/sandbox.json      # Sandbox credentials
+~/.config/etrade-cli/production.json   # Production credentials
+```
+
+Environment variables (`ETRADE_CONSUMER_KEY`, `ETRADE_CONSUMER_SECRET`) override config file values. See [CLI Reference](docs/cli/README.md) for details.
 
 ## Documentation
 

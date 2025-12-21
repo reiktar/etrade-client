@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from etrade_client.cli.config import CLIConfig, _default_config_dir
+from etrade_client.cli.config import CLIConfig, _default_config_dir, _default_data_dir
 
 # Create main app
 app = typer.Typer(
@@ -34,17 +34,32 @@ def main(
         None,
         "--config-dir",
         "-c",
-        help="Config directory (default: ~/.config/etrade-cli).",
+        help="Config directory for credentials (default: ~/.config/etrade-cli).",
         envvar="ETRADE_CLI_CONFIG_DIR",
+    ),
+    data_dir: Path | None = typer.Option(
+        None,
+        "--data-dir",
+        "-d",
+        help="Data directory for tokens (default: ~/.local/share/etrade-cli).",
+        envvar="ETRADE_CLI_DATA_DIR",
     ),
 ) -> None:
     """E*Trade API command-line interface.
 
     Use --production to connect to the live E*Trade API.
     Default is sandbox mode for testing.
+
+    Configuration files are stored in XDG-compliant locations:
+    - Credentials: ~/.config/etrade-cli/{sandbox,production}.json
+    - Tokens: ~/.local/share/etrade-cli/{sandbox,production}-token.json
+
+    Environment variables (ETRADE_CONSUMER_KEY, ETRADE_CONSUMER_SECRET)
+    override values from config files.
     """
     ctx.obj = CLIConfig(
         sandbox=sandbox,
         verbose=verbose,
         config_dir=config_dir or _default_config_dir(),
+        data_dir=data_dir or _default_data_dir(),
     )
