@@ -155,18 +155,24 @@ class Order(BaseModel):
     """Order summary from list endpoint."""
 
     order_id: int = Field(alias="orderId")
-    details: OrderDetail = Field(alias="OrderDetail")
+    # Note: API returns OrderDetail as a list even for single orders
+    order_details: list[OrderDetail] = Field(alias="OrderDetail")
 
     model_config = {"populate_by_name": True}
 
+    @property
+    def details(self) -> OrderDetail | None:
+        """Get the first (primary) order detail."""
+        return self.order_details[0] if self.order_details else None
+
     # Convenience accessors
     @property
-    def status(self) -> str:
-        return self.details.status
+    def status(self) -> str | None:
+        return self.details.status if self.details else None
 
     @property
     def symbol(self) -> str | None:
-        return self.details.symbol
+        return self.details.symbol if self.details else None
 
 
 class OrderListResponse(BaseModel):
@@ -190,8 +196,16 @@ class OrderListResponse(BaseModel):
         if isinstance(order_list, dict):
             order_list = [order_list]
 
+        # Handle E*Trade's quirk where single-element arrays may come as dicts
+        parsed_orders = []
+        for o in order_list:
+            # OrderDetail may come as dict or list
+            if "OrderDetail" in o and isinstance(o["OrderDetail"], dict):
+                o = {**o, "OrderDetail": [o["OrderDetail"]]}
+            parsed_orders.append(Order.model_validate(o))
+
         return cls(
-            orders=[Order.model_validate(o) for o in order_list],
+            orders=parsed_orders,
             marker=orders_response.get("marker"),
             next_page=orders_response.get("next"),
         )

@@ -22,3 +22,6 @@ htmlcov/
 
 # Token storage (sensitive)
 tokens.json
+
+# Integration test tokens (sensitive)
+tests/integration/.tokens.json

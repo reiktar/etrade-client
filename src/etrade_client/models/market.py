@@ -21,6 +21,7 @@ class QuoteStatus(StrEnum):
 class OptionExpiryType(StrEnum):
     """Option expiration type values."""
 
+    DAILY = "DAILY"
     WEEKLY = "WEEKLY"
     MONTHLY = "MONTHLY"
     QUARTERLY = "QUARTERLY"
@@ -111,7 +112,15 @@ class QuoteResponse(BaseModel):
         if isinstance(quote_data, dict):
             quote_data = [quote_data]
 
-        return cls(quotes=[Quote.model_validate(q) for q in quote_data])
+        quotes = []
+        for q in quote_data:
+            # Extract symbol from nested Product object
+            product = q.get("Product", {})
+            symbol = product.get("symbol", "")
+            quote_dict = {**q, "symbol": symbol}
+            quotes.append(Quote.model_validate(quote_dict))
+
+        return cls(quotes=quotes)
 
 
 class OptionType(StrEnum):
@@ -127,7 +136,8 @@ class OptionDetails(BaseModel):
     symbol: str = Field(alias="optionSymbol")
     option_type: OptionType = Field(alias="optionType")
     strike_price: Decimal = Field(alias="strikePrice")
-    expiry_date: date = Field(alias="expiryDate")
+    # Expiry date may not be in response (known from chain context)
+    expiry_date: date | None = Field(default=None, alias="expiryDate")
     bid: Decimal | None = Field(default=None)
     ask: Decimal | None = Field(default=None)
     last_price: Decimal | None = Field(default=None, alias="lastPrice")
