@@ -136,7 +136,7 @@ class OrderInstrument(BaseModel):
     quantity: int = Field(alias="orderedQuantity")
     quantity_type: QuantityType = Field(alias="quantityType")
     filled_quantity: int = Field(alias="filledQuantity")
-    average_execution_price: Decimal = Field(alias="averageExecutionPrice")
+    average_execution_price: Decimal | None = Field(default=None, alias="averageExecutionPrice")
     estimated_commission: Decimal = Field(alias="estimatedCommission")
     estimated_fees: Decimal = Field(alias="estimatedFees")
     symbol_description: str = Field(alias="symbolDescription")
