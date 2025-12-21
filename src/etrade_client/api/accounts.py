@@ -181,6 +181,10 @@ class AccountsAPI(BaseAPI):
         Yields individual transactions lazily. Next page is only fetched
         when the consumer continues iterating.
 
+        Note: The E*Trade API has a pagination quirk where the last transaction
+        of each page may be duplicated as the first transaction of the next page.
+        This method automatically deduplicates by transaction_id.
+
         Args:
             account_id_key: The account ID key
             start_date: Start date for transaction range
@@ -193,6 +197,8 @@ class AccountsAPI(BaseAPI):
             Individual Transaction objects
         """
         yielded = 0
+        seen_ids: set[str] = set()
+
         async for page in self._iter_transaction_pages(
             account_id_key,
             start_date=start_date,
@@ -201,6 +207,11 @@ class AccountsAPI(BaseAPI):
             count=count,
         ):
             for tx in page.transactions:
+                # Skip duplicates (E*Trade API pagination quirk)
+                if tx.transaction_id in seen_ids:
+                    continue
+                seen_ids.add(tx.transaction_id)
+
                 if limit is not None and yielded >= limit:
                     return
                 yield tx
