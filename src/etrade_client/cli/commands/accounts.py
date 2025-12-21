@@ -1,5 +1,8 @@
 """Accounts commands."""
 
+from datetime import date
+from decimal import Decimal
+
 import typer
 
 from etrade_client.cli.async_runner import async_command
@@ -153,3 +156,175 @@ async def get_portfolio(
         ]
 
         format_output(positions_data, output, title="Portfolio Positions")
+
+
+@app.command("dividends")
+@async_command
+async def list_dividends(
+    ctx: typer.Context,
+    account_id: str = typer.Argument(
+        ...,
+        help="Account ID key.",
+    ),
+    symbol: str | None = typer.Option(
+        None,
+        "--symbol",
+        "-s",
+        help="Filter by symbol.",
+    ),
+    from_date: str | None = typer.Option(
+        None,
+        "--from",
+        help="Start date (YYYY-MM-DD). Requires --to.",
+    ),
+    to_date: str | None = typer.Option(
+        None,
+        "--to",
+        help="End date (YYYY-MM-DD). Requires --from.",
+    ),
+    ytd: bool = typer.Option(
+        False,
+        "--ytd",
+        help="Year to date (Jan 1 to today).",
+    ),
+    alltime: bool = typer.Option(
+        False,
+        "--alltime",
+        help="All dividends (full history).",
+    ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        "-n",
+        help="Maximum dividends to return (default: all).",
+    ),
+    output: OutputFormat = typer.Option(
+        OutputFormat.TABLE,
+        "--output",
+        "-o",
+        help="Output format.",
+    ),
+) -> None:
+    """List dividend transactions for an account.
+
+    Without date filters, only recent dividends are returned.
+    Use --ytd, --alltime, or --from/--to together for full history.
+
+    Shows both cash dividends and DRIP (dividend reinvestment) transactions.
+    DRIP transactions show as negative amounts with shares purchased.
+    """
+    config: CLIConfig = ctx.obj
+
+    # Parse dates
+    start_date = None
+    end_date = None
+    today = date.today()
+
+    # Handle convenience date options
+    if ytd:
+        start_date = date(today.year, 1, 1)
+        end_date = today
+    elif alltime:
+        start_date = date(2010, 1, 1)
+        end_date = today
+    elif from_date or to_date:
+        if from_date:
+            try:
+                start_date = date.fromisoformat(from_date)
+            except ValueError:
+                print_error("Invalid from date format. Use YYYY-MM-DD.")
+                raise typer.Exit(1) from None
+        if to_date:
+            try:
+                end_date = date.fromisoformat(to_date)
+            except ValueError:
+                print_error("Invalid to date format. Use YYYY-MM-DD.")
+                raise typer.Exit(1) from None
+
+    async with get_client(config) as client:
+        if not client.is_authenticated:
+            print_error("Not authenticated. Run 'etrade-cli auth login' first.")
+            raise typer.Exit(1)
+
+        # Collect dividend transactions
+        dividends = []
+        total_cash = Decimal("0")
+        total_reinvested = Decimal("0")
+
+        async for tx in client.accounts.iter_transactions(
+            account_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=None,  # We'll filter and limit ourselves
+        ):
+            # Only include dividend transactions
+            if tx.transaction_type != "Dividend":
+                continue
+
+            # Filter by symbol if specified
+            tx_symbol = tx.symbol
+            if symbol and (not tx_symbol or tx_symbol.upper() != symbol.upper()):
+                continue
+
+            # Determine if this is a DRIP (reinvestment)
+            is_drip = (
+                tx.amount < 0
+                or "REINVESTMENT" in (tx.description or "").upper()
+            )
+
+            # Track totals
+            if is_drip:
+                total_reinvested += abs(tx.amount)
+            else:
+                total_cash += tx.amount
+
+            dividends.append({
+                "tx": tx,
+                "is_drip": is_drip,
+            })
+
+            # Check limit
+            if limit is not None and len(dividends) >= limit:
+                break
+
+        if not dividends:
+            format_output([], output, title="Dividends")
+            return
+
+        # Format dividend data
+        dividend_data = []
+        for item in dividends:
+            tx = item["tx"]
+            is_drip = item["is_drip"]
+
+            row = {
+                "date": tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else "",
+                "symbol": tx.symbol or "",
+                "amount": f"${abs(tx.amount):,.2f}" if tx.amount is not None else "",
+                "drip": "Yes" if is_drip else "",
+            }
+
+            # Add DRIP details if applicable
+            if is_drip and tx.brokerage:
+                if tx.brokerage.quantity:
+                    row["shares"] = f"{tx.brokerage.quantity:.3f}"
+                if tx.brokerage.price:
+                    row["price"] = f"${tx.brokerage.price:,.2f}"
+            else:
+                row["shares"] = ""
+                row["price"] = ""
+
+            dividend_data.append(row)
+
+        # Add summary row for table output
+        if output == OutputFormat.TABLE and len(dividends) > 1:
+            dividend_data.append({
+                "date": "---",
+                "symbol": "TOTAL",
+                "amount": f"${total_cash + total_reinvested:,.2f}",
+                "drip": f"(${total_reinvested:,.2f} reinvested)",
+                "shares": "",
+                "price": "",
+            })
+
+        format_output(dividend_data, output, title="Dividends")

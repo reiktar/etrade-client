@@ -295,6 +295,55 @@ etrade-cli accounts portfolio abc123
 etrade-cli accounts portfolio abc123 --view COMPLETE
 ```
 
+### accounts dividends
+
+List dividend transactions for an account.
+
+```bash
+etrade-cli accounts dividends ACCOUNT_ID [OPTIONS]
+
+Arguments:
+  ACCOUNT_ID  Account ID key
+
+Options:
+  -s, --symbol TEXT    Filter by symbol
+  --from TEXT          Start date (YYYY-MM-DD). Requires --to.
+  --to TEXT            End date (YYYY-MM-DD). Requires --from.
+  --ytd                Year to date (Jan 1 to today)
+  --alltime            All dividends (full history)
+  -n, --limit INT      Maximum dividends to return [default: all]
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Note:** Shows both cash dividends and DRIP (dividend reinvestment) transactions. DRIP transactions are marked with "Yes" and show shares purchased at the reinvestment price.
+
+**Example:**
+```bash
+# Recent dividends
+etrade-cli accounts dividends abc123
+
+# Year to date
+etrade-cli accounts dividends abc123 --ytd
+
+# Specific symbol
+etrade-cli accounts dividends abc123 --symbol AAPL --ytd
+
+# Export to CSV
+etrade-cli accounts dividends abc123 --alltime -o csv > dividends.csv
+```
+
+**Output:**
+```
+                                Dividends
+┏━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
+┃ Date       ┃ Symbol ┃ Amount  ┃ Drip               ┃ Shares ┃ Price  ┃
+┡━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
+│ 2025-12-18 │ YBTC   │ $3.40   │ Yes                │ 0.110  │ $30.97 │
+│ 2025-12-18 │ YBTC   │ $3.43   │                    │        │        │
+│ ---        │ TOTAL  │ $6.83   │ ($3.40 reinvested) │        │        │
+└────────────┴────────┴─────────┴────────────────────┴────────┴────────┘
+```
+
 ---
 
 ## market - Market Data
