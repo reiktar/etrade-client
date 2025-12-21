@@ -25,7 +25,7 @@ class TestQuoteResponse:
             "QuoteResponse": {
                 "QuoteData": [
                     {
-                        "symbol": "AAPL",
+                        "Product": {"symbol": "AAPL", "securityType": "EQ"},
                         "quoteStatus": "REALTIME",
                         "All": {
                             "lastTrade": "175.50",
@@ -39,7 +39,7 @@ class TestQuoteResponse:
                         },
                     },
                     {
-                        "symbol": "MSFT",
+                        "Product": {"symbol": "MSFT", "securityType": "EQ"},
                         "quoteStatus": "REALTIME",
                         "All": {
                             "lastTrade": "420.00",
@@ -70,7 +70,7 @@ class TestQuoteResponse:
         data = {
             "QuoteResponse": {
                 "QuoteData": {
-                    "symbol": "GOOG",
+                    "Product": {"symbol": "GOOG", "securityType": "EQ"},
                     "quoteStatus": "DELAYED",
                     "All": {
                         "lastTrade": "140.00",

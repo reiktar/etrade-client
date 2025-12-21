@@ -29,6 +29,12 @@ class OrderType(StrEnum):
     STOP_LIMIT = "STOP_LIMIT"
     TRAILING_STOP_CNST = "TRAILING_STOP_CNST"
     TRAILING_STOP_PCT = "TRAILING_STOP_PCT"
+    # Spread/complex order types
+    NET_DEBIT = "NET_DEBIT"
+    NET_CREDIT = "NET_CREDIT"
+    NET_EVEN = "NET_EVEN"
+    MARKET_ON_OPEN = "MARKET_ON_OPEN"
+    MARKET_ON_CLOSE = "MARKET_ON_CLOSE"
 
 
 class OrderTerm(StrEnum):
@@ -78,6 +84,34 @@ class CallPut(StrEnum):
     PUT = "PUT"
 
 
+class QuantityType(StrEnum):
+    """Quantity type for orders."""
+
+    QUANTITY = "QUANTITY"
+    DOLLAR = "DOLLAR"
+    ALL_I_OWN = "ALL_I_OWN"
+
+
+class OrderCategory(StrEnum):
+    """Order category (type of security/spread or execution type)."""
+
+    # Security types
+    EQ = "EQ"  # Equity
+    OPTN = "OPTN"  # Option
+    SPREADS = "SPREADS"
+    BUY_WRITES = "BUY_WRITES"
+    BUTTERFLY = "BUTTERFLY"
+    IRON_BUTTERFLY = "IRON_BUTTERFLY"
+    CONDOR = "CONDOR"
+    IRON_CONDOR = "IRON_CONDOR"
+    MF = "MF"  # Mutual Fund
+    MMF = "MMF"  # Money Market Fund
+    # Execution types
+    ONE_CANCELS_ALL = "ONE_CANCELS_ALL"
+    ONE_TRIGGERS_ALL = "ONE_TRIGGERS_ALL"
+    ONE_TRIGGERS_OCO = "ONE_TRIGGERS_OCO"
+
+
 class OrderProduct(BaseModel):
     """Product in an order."""
 
@@ -88,6 +122,7 @@ class OrderProduct(BaseModel):
     expiry_month: int | None = Field(default=None, alias="expiryMonth")
     expiry_day: int | None = Field(default=None, alias="expiryDay")
     strike_price: Decimal | None = Field(default=None, alias="strikePrice")
+    product_id: dict | None = Field(default=None, alias="productId")
 
     model_config = {"populate_by_name": True}
 
@@ -98,10 +133,12 @@ class OrderInstrument(BaseModel):
     product: OrderProduct = Field(alias="Product")
     order_action: OrderAction = Field(alias="orderAction")
     quantity: int = Field(alias="orderedQuantity")
+    quantity_type: QuantityType | None = Field(default=None, alias="quantityType")
     filled_quantity: int | None = Field(default=None, alias="filledQuantity")
     average_execution_price: Decimal | None = Field(default=None, alias="averageExecutionPrice")
     estimated_commission: Decimal | None = Field(default=None, alias="estimatedCommission")
     estimated_fees: Decimal | None = Field(default=None, alias="estimatedFees")
+    symbol_description: str | None = Field(default=None, alias="symbolDescription")
 
     model_config = {"populate_by_name": True}
 
@@ -109,22 +146,23 @@ class OrderInstrument(BaseModel):
 class OrderDetail(BaseModel):
     """Complete order detail."""
 
-    order_number: int = Field(alias="orderNumber")
-    account_id: str = Field(alias="accountId")
+    # These may not be present in all responses (e.g., sandbox)
+    order_number: int | None = Field(default=None, alias="orderNumber")
+    account_id: str | None = Field(default=None, alias="accountId")
     placed_time: datetime | None = Field(default=None, alias="placedTime")
     executed_time: datetime | None = Field(default=None, alias="executedTime")
 
-    # Order configuration
-    order_type: OrderType = Field(alias="priceType")
-    order_term: OrderTerm = Field(alias="orderTerm")
-    market_session: MarketSession = Field(alias="marketSession")
+    # Order configuration - these may also be optional in some responses
+    order_type: OrderType | None = Field(default=None, alias="priceType")
+    order_term: OrderTerm | None = Field(default=None, alias="orderTerm")
+    market_session: MarketSession | None = Field(default=None, alias="marketSession")
 
     # Pricing
     limit_price: Decimal | None = Field(default=None, alias="limitPrice")
     stop_price: Decimal | None = Field(default=None, alias="stopPrice")
 
     # Status
-    status: OrderStatus
+    status: OrderStatus | None = Field(default=None)
     order_value: Decimal | None = Field(default=None, alias="orderValue")
     estimated_total_amount: Decimal | None = Field(default=None, alias="estimatedTotalAmount")
 
@@ -133,6 +171,18 @@ class OrderDetail(BaseModel):
 
     # Messages (warnings, info)
     messages: list[dict] | None = Field(default=None)
+
+    # Additional fields from sandbox
+    all_or_none: bool | None = Field(default=None, alias="allOrNone")
+    gcd: int | None = Field(default=None)
+    ratio: str | None = Field(default=None)
+
+    # Spread/complex order pricing
+    net_price: Decimal | None = Field(default=None, alias="netPrice")
+    net_bid: Decimal | None = Field(default=None, alias="netBid")
+    net_ask: Decimal | None = Field(default=None, alias="netAsk")
+    initial_stop_price: Decimal | None = Field(default=None, alias="initialStopPrice")
+    bracketed_limit_price: Decimal | None = Field(default=None, alias="bracketedLimitPrice")
 
     model_config = {"populate_by_name": True}
 
@@ -155,18 +205,30 @@ class Order(BaseModel):
     """Order summary from list endpoint."""
 
     order_id: int = Field(alias="orderId")
-    details: OrderDetail = Field(alias="OrderDetail")
+    # Note: API returns OrderDetail as a list even for single orders
+    order_details: list[OrderDetail] = Field(alias="OrderDetail")
+
+    # Order-level metadata
+    order_category: OrderCategory | None = Field(default=None, alias="orderType")
+    order_description: str | None = Field(default=None, alias="details")
+    total_commission: Decimal | None = Field(default=None, alias="totalCommission")
+    total_order_value: Decimal | None = Field(default=None, alias="totalOrderValue")
 
     model_config = {"populate_by_name": True}
 
+    @property
+    def details(self) -> OrderDetail | None:
+        """Get the first (primary) order detail."""
+        return self.order_details[0] if self.order_details else None
+
     # Convenience accessors
     @property
-    def status(self) -> str:
-        return self.details.status
+    def status(self) -> str | None:
+        return self.details.status if self.details else None
 
     @property
     def symbol(self) -> str | None:
-        return self.details.symbol
+        return self.details.symbol if self.details else None
 
 
 class OrderListResponse(BaseModel):
@@ -190,8 +252,16 @@ class OrderListResponse(BaseModel):
         if isinstance(order_list, dict):
             order_list = [order_list]
 
+        # Handle E*Trade's quirk where single-element arrays may come as dicts
+        parsed_orders = []
+        for o in order_list:
+            # OrderDetail may come as dict or list
+            if "OrderDetail" in o and isinstance(o["OrderDetail"], dict):
+                o = {**o, "OrderDetail": [o["OrderDetail"]]}
+            parsed_orders.append(Order.model_validate(o))
+
         return cls(
-            orders=[Order.model_validate(o) for o in order_list],
+            orders=parsed_orders,
             marker=orders_response.get("marker"),
             next_page=orders_response.get("next"),
         )
