@@ -125,10 +125,12 @@ class ComputedBalance(BaseModel):
     cash_balance: Decimal = Field(alias="cashBalance")
     settled_cash_for_investment: Decimal = Field(alias="settledCashForInvestment")
     un_settled_cash_for_investment: Decimal = Field(alias="unSettledCashForInvestment")
-    funds_withheld_from_purchase_power: Decimal = Field(
-        alias="fundsWithheldFromPurchasePower"
+    funds_withheld_from_purchase_power: Decimal | None = Field(
+        default=None, alias="fundsWithheldFromPurchasePower"
     )
-    funds_withheld_from_withdrawal: Decimal = Field(alias="fundsWithheldFromWithdrawal")
+    funds_withheld_from_withdrawal: Decimal | None = Field(
+        default=None, alias="fundsWithheldFromWithdrawal"
+    )
 
     # Nested objects - always present in API responses
     open_calls: OpenCalls = Field(alias="OpenCalls")
