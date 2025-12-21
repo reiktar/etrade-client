@@ -1,0 +1,521 @@
+# etrade-cli Reference
+
+Command-line interface for E\*Trade API.
+
+## Table of Contents
+
+1. [Installation](#installation)
+2. [Configuration](#configuration)
+3. [Global Options](#global-options)
+4. [Commands](#commands)
+   - [auth](#auth---authentication)
+   - [accounts](#accounts---account-information)
+   - [market](#market---market-data)
+   - [orders](#orders---order-management)
+   - [alerts](#alerts---alert-management)
+   - [transactions](#transactions---transaction-history)
+
+## Installation
+
+```bash
+uv add etrade-client[cli]
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+export ETRADE_CONSUMER_KEY="your_consumer_key"
+export ETRADE_CONSUMER_SECRET="your_consumer_secret"
+```
+
+### Config File
+
+Create `~/.config/etrade-cli/config.json`:
+
+```json
+{
+    "consumer_key": "your_consumer_key",
+    "consumer_secret": "your_consumer_secret"
+}
+```
+
+## Global Options
+
+```
+etrade-cli [OPTIONS] COMMAND
+
+Options:
+  -s, --sandbox / -p, --production
+                        Use sandbox (default) or production environment
+                        [env var: ETRADE_SANDBOX]
+  -v, --verbose         Enable verbose output
+  -c, --config-dir PATH Config directory
+                        [env var: ETRADE_CLI_CONFIG_DIR]
+  --help                Show this message and exit
+```
+
+### Examples
+
+```bash
+# Use sandbox (default)
+etrade-cli accounts list
+
+# Use production
+etrade-cli --production accounts list
+
+# Custom config directory
+etrade-cli --config-dir /path/to/config accounts list
+```
+
+---
+
+## auth - Authentication
+
+Manage OAuth authentication.
+
+### auth login
+
+Authenticate with E\*Trade OAuth.
+
+```bash
+etrade-cli auth login [OPTIONS]
+
+Options:
+  --no-browser  Don't open browser automatically
+```
+
+**Example:**
+```bash
+# Interactive login (opens browser)
+etrade-cli auth login
+
+# Manual URL (no browser)
+etrade-cli auth login --no-browser
+```
+
+### auth status
+
+Check authentication status.
+
+```bash
+etrade-cli auth status
+```
+
+**Output:**
+```
+Environment: sandbox
+Token path: /home/user/.config/etrade-cli/token.json
+✓ Token found - you are authenticated
+Note: Tokens expire at midnight US Eastern time
+```
+
+### auth renew
+
+Renew the current access token.
+
+```bash
+etrade-cli auth renew
+```
+
+### auth logout
+
+Log out and clear saved token.
+
+```bash
+etrade-cli auth logout [OPTIONS]
+
+Options:
+  --revoke / --no-revoke  Revoke token on server (default: revoke)
+```
+
+**Example:**
+```bash
+# Revoke on server and clear locally
+etrade-cli auth logout
+
+# Only clear local token
+etrade-cli auth logout --no-revoke
+```
+
+---
+
+## accounts - Account Information
+
+View accounts, balances, and portfolios.
+
+### accounts list
+
+List all accounts.
+
+```bash
+etrade-cli accounts list [OPTIONS]
+
+Options:
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+etrade-cli accounts list
+
+# Output as JSON
+etrade-cli accounts list -o json
+```
+
+**Output:**
+```
+                         Accounts
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
+┃ account_id         ┃ name         ┃ type       ┃ mode   ┃ status ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
+│ abc123             │ Individual   │ INDIVIDUAL │ MARGIN │ ACTIVE │
+│ def456             │ Retirement   │ IRA        │ CASH   │ ACTIVE │
+└────────────────────┴──────────────┴────────────┴────────┴────────┘
+```
+
+### accounts balance
+
+Get account balance.
+
+```bash
+etrade-cli accounts balance ACCOUNT_ID [OPTIONS]
+
+Arguments:
+  ACCOUNT_ID  Account ID key (from 'accounts list')
+
+Options:
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+etrade-cli accounts balance abc123
+```
+
+### accounts portfolio
+
+Get account portfolio positions.
+
+```bash
+etrade-cli accounts portfolio ACCOUNT_ID [OPTIONS]
+
+Arguments:
+  ACCOUNT_ID  Account ID key
+
+Options:
+  -v, --view TEXT      View type: QUICK, PERFORMANCE, FUNDAMENTAL, COMPLETE
+                       [default: QUICK]
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+etrade-cli accounts portfolio abc123
+
+# Detailed view
+etrade-cli accounts portfolio abc123 --view COMPLETE
+```
+
+---
+
+## market - Market Data
+
+Get quotes and option data.
+
+### market quote
+
+Get quotes for one or more symbols.
+
+```bash
+etrade-cli market quote SYMBOLS... [OPTIONS]
+
+Arguments:
+  SYMBOLS  One or more ticker symbols (max 25)
+
+Options:
+  -d, --detail TEXT    Detail level: ALL, FUNDAMENTAL, INTRADAY, OPTIONS, WEEK_52
+                       [default: ALL]
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+# Single symbol
+etrade-cli market quote AAPL
+
+# Multiple symbols
+etrade-cli market quote AAPL MSFT GOOGL
+
+# Fundamental data only
+etrade-cli market quote AAPL --detail FUNDAMENTAL
+```
+
+**Output:**
+```
+                              Quotes
+┏━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ symbol ┃ last      ┃ change  ┃ change_pct ┃ bid       ┃ ask       ┃ volume      ┃
+┡━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ AAPL   │ $175.00   │ +2.50   │ +1.45%     │ $174.98   │ $175.02   │ 45,234,567  │
+│ MSFT   │ $378.25   │ -1.75   │ -0.46%     │ $378.20   │ $378.30   │ 23,456,789  │
+└────────┴───────────┴─────────┴────────────┴───────────┴───────────┴─────────────┘
+```
+
+### market lookup
+
+Look up securities by name or symbol.
+
+```bash
+etrade-cli market lookup SEARCH [OPTIONS]
+
+Arguments:
+  SEARCH  Company name or partial symbol to search
+
+Options:
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+etrade-cli market lookup "Apple"
+```
+
+### market options-dates
+
+Get available option expiration dates.
+
+```bash
+etrade-cli market options-dates SYMBOL [OPTIONS]
+
+Arguments:
+  SYMBOL  Underlying symbol
+
+Options:
+  -t, --type TEXT      Expiry type: ALL, MONTHLY, WEEKLY
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+etrade-cli market options-dates AAPL
+
+# Monthly only
+etrade-cli market options-dates AAPL --type MONTHLY
+```
+
+### market options-chain
+
+Get options chain for a symbol and expiry date.
+
+```bash
+etrade-cli market options-chain SYMBOL EXPIRY [OPTIONS]
+
+Arguments:
+  SYMBOL  Underlying symbol
+  EXPIRY  Expiry date (YYYY-MM-DD)
+
+Options:
+  -t, --type TEXT      Chain type: CALL, PUT, CALLPUT [default: CALLPUT]
+  -n, --strikes INT    Number of strikes to return
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+# Full chain
+etrade-cli market options-chain AAPL 2025-01-17
+
+# Calls only, 5 strikes
+etrade-cli market options-chain AAPL 2025-01-17 --type CALL --strikes 5
+```
+
+---
+
+## orders - Order Management
+
+List and cancel orders.
+
+### orders list
+
+List orders for an account.
+
+```bash
+etrade-cli orders list ACCOUNT_ID [OPTIONS]
+
+Arguments:
+  ACCOUNT_ID  Account ID key
+
+Options:
+  -s, --status TEXT    Filter by status: OPEN, EXECUTED, CANCELLED, EXPIRED, REJECTED
+  --symbol TEXT        Filter by symbol
+  --from TEXT          Start date (YYYY-MM-DD)
+  --to TEXT            End date (YYYY-MM-DD)
+  -n, --limit INT      Maximum orders to return [default: 25]
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+# All orders
+etrade-cli orders list abc123
+
+# Open orders only
+etrade-cli orders list abc123 --status OPEN
+
+# Orders for specific symbol
+etrade-cli orders list abc123 --symbol AAPL
+```
+
+### orders cancel
+
+Cancel an open order.
+
+```bash
+etrade-cli orders cancel ACCOUNT_ID ORDER_ID
+```
+
+**Example:**
+```bash
+etrade-cli orders cancel abc123 12345
+```
+
+---
+
+## alerts - Alert Management
+
+View and delete alerts.
+
+### alerts list
+
+List alerts.
+
+```bash
+etrade-cli alerts list [OPTIONS]
+
+Options:
+  -c, --category TEXT  Filter by category: STOCK, ACCOUNT
+  -s, --status TEXT    Filter by status: READ, UNREAD, DELETED
+  --search TEXT        Search in alert subject
+  -n, --limit INT      Maximum alerts to return (max 300) [default: 25]
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+# All alerts
+etrade-cli alerts list
+
+# Unread stock alerts
+etrade-cli alerts list --status UNREAD --category STOCK
+```
+
+### alerts get
+
+Get alert details.
+
+```bash
+etrade-cli alerts get ALERT_ID [OPTIONS]
+
+Arguments:
+  ALERT_ID  Alert ID
+
+Options:
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+### alerts delete
+
+Delete one or more alerts.
+
+```bash
+etrade-cli alerts delete ALERT_IDS...
+
+Arguments:
+  ALERT_IDS  Alert ID(s) to delete
+```
+
+**Example:**
+```bash
+# Single alert
+etrade-cli alerts delete 12345
+
+# Multiple alerts
+etrade-cli alerts delete 12345 12346 12347
+```
+
+---
+
+## transactions - Transaction History
+
+View transaction history.
+
+### transactions list
+
+List transactions for an account.
+
+```bash
+etrade-cli transactions list ACCOUNT_ID [OPTIONS]
+
+Arguments:
+  ACCOUNT_ID  Account ID key
+
+Options:
+  --from TEXT          Start date (YYYY-MM-DD)
+  --to TEXT            End date (YYYY-MM-DD)
+  -n, --limit INT      Maximum transactions to return [default: 50]
+  -s, --sort TEXT      Sort order: ASC or DESC [default: DESC]
+  -o, --output [table|json|csv]  Output format [default: table]
+```
+
+**Example:**
+```bash
+# Recent transactions
+etrade-cli transactions list abc123
+
+# Date range
+etrade-cli transactions list abc123 --from 2024-01-01 --to 2024-12-31
+
+# Export to CSV
+etrade-cli transactions list abc123 -o csv > transactions.csv
+```
+
+---
+
+## Output Formats
+
+All commands support three output formats:
+
+| Format | Flag | Description |
+|--------|------|-------------|
+| `table` | `-o table` | Formatted table (default) |
+| `json` | `-o json` | JSON array |
+| `csv` | `-o csv` | CSV format |
+
+**Examples:**
+```bash
+# Default table output
+etrade-cli accounts list
+
+# JSON for scripting
+etrade-cli accounts list -o json | jq '.[] | .account_id'
+
+# CSV for spreadsheets
+etrade-cli transactions list abc123 -o csv > transactions.csv
+```
+
+## Shell Completion
+
+Enable shell completion for bash, zsh, or fish:
+
+```bash
+# Bash
+etrade-cli --install-completion bash
+
+# Zsh
+etrade-cli --install-completion zsh
+
+# Fish
+etrade-cli --install-completion fish
+```
