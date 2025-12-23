@@ -10,16 +10,17 @@ import typer
 from etrade_client.exceptions import ETradeAPIError
 
 
-def _is_token_expired_error(e: ETradeAPIError) -> bool:
-    """Check if the error is due to token expiration."""
-    return "token_expired" in str(e.message).lower()
+def _is_token_invalid_error(e: ETradeAPIError) -> bool:
+    """Check if the error is due to an invalid token (expired or rejected)."""
+    msg = str(e.message).lower()
+    return "token_expired" in msg or "token_rejected" in msg
 
 
-async def _handle_token_expired(ctx: typer.Context) -> None:
-    """Handle token expiration by prompting for re-authentication."""
+async def _handle_token_invalid(ctx: typer.Context) -> None:
+    """Handle invalid token by prompting for re-authentication."""
     from etrade_client.cli.formatters import console, print_error, print_info
 
-    print_error("Your session has expired.")
+    print_error("Your session is invalid or has expired.")
     print_info("E*Trade tokens expire at midnight US Eastern time.")
     console.print()
 
@@ -59,7 +60,7 @@ def async_command[T](f: Callable[..., Coroutine[Any, Any, T]]) -> Callable[..., 
             try:
                 return await f(*args, **kwargs)
             except ETradeAPIError as e:
-                if _is_token_expired_error(e):
+                if _is_token_invalid_error(e):
                     # Find the typer.Context in args or kwargs
                     ctx = None
                     for arg in args:
@@ -70,7 +71,7 @@ def async_command[T](f: Callable[..., Coroutine[Any, Any, T]]) -> Callable[..., 
                         # Check kwargs (typer passes ctx as keyword arg)
                         ctx = kwargs.get("ctx")
                     if ctx is not None:
-                        await _handle_token_expired(ctx)
+                        await _handle_token_invalid(ctx)
                         # If we get here, user re-authenticated successfully
                         # Re-run the original command
                         return await f(*args, **kwargs)
