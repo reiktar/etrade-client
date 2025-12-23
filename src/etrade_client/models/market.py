@@ -1,11 +1,11 @@
 """Market data models."""
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class QuoteStatus(StrEnum):
@@ -17,6 +17,7 @@ class QuoteStatus(StrEnum):
     EH_REALTIME = "EH_REALTIME"
     EH_BEFORE_OPEN = "EH_BEFORE_OPEN"
     EH_CLOSED = "EH_CLOSED"
+    INDICATIVE_REALTIME = "INDICATIVE_REALTIME"
 
 
 class OptionExpiryType(StrEnum):
