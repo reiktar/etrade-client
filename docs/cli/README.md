@@ -311,6 +311,8 @@ Options:
   --to TEXT            End date (YYYY-MM-DD). Requires --from.
   --ytd                Year to date (Jan 1 to today)
   --alltime            All dividends (full history)
+  --by-symbol          Group totals by symbol
+  --by-month           Group totals by year-month
   -n, --limit INT      Maximum dividends to return [default: all]
   -o, --output [table|json|csv]  Output format [default: table]
 ```
@@ -328,11 +330,20 @@ etrade-cli accounts dividends abc123 --ytd
 # Specific symbol
 etrade-cli accounts dividends abc123 --symbol AAPL --ytd
 
+# Group by symbol (sorted by total amount)
+etrade-cli accounts dividends abc123 --ytd --by-symbol
+
+# Group by month
+etrade-cli accounts dividends abc123 --ytd --by-month
+
+# Group by both month and symbol
+etrade-cli accounts dividends abc123 --ytd --by-symbol --by-month
+
 # Export to CSV
 etrade-cli accounts dividends abc123 --alltime -o csv > dividends.csv
 ```
 
-**Output:**
+**Output (default):**
 ```
                                 Dividends
 ┏━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
@@ -343,6 +354,34 @@ etrade-cli accounts dividends abc123 --alltime -o csv > dividends.csv
 │ ---        │ TOTAL  │ $6.83   │ ($3.40 reinvested) │        │        │
 └────────────┴────────┴─────────┴────────────────────┴────────┴────────┘
 ```
+
+**Output (--by-symbol):**
+```
+                         Dividends by Symbol
+┏━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┓
+┃ Symbol ┃ Amount    ┃ Reinvested ┃ Cash    ┃ Count ┃
+┡━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
+│ SCHD   │ $125.50   │ $125.50    │ $0.00   │ 4     │
+│ VTI    │ $98.25    │ $0.00      │ $98.25  │ 4     │
+│ AAPL   │ $45.00    │ $45.00     │ $0.00   │ 4     │
+│ TOTAL  │ $268.75   │ $170.50    │ $98.25  │       │
+└────────┴───────────┴────────────┴─────────┴───────┘
+```
+
+**Output (--by-month):**
+```
+                        Dividends by Month
+┏━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┓
+┃ Month   ┃ Amount    ┃ Reinvested ┃ Cash    ┃ Count ┃
+┡━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
+│ 2025-12 │ $85.50    │ $45.00     │ $40.50  │ 5     │
+│ 2025-11 │ $92.25    │ $62.50     │ $29.75  │ 4     │
+│ 2025-10 │ $91.00    │ $63.00     │ $28.00  │ 3     │
+│ TOTAL   │ $268.75   │ $170.50    │ $98.25  │       │
+└─────────┴───────────┴────────────┴─────────┴───────┘
+```
+
+The **Cash** column shows dividend amounts that were not automatically reinvested (DRIP'd) and are available in your account balance for manual reinvestment.
 
 ---
 
@@ -598,12 +637,13 @@ Arguments:
   ACCOUNT_ID  Account ID key
 
 Options:
+  -s, --symbol TEXT    Filter by symbol
   --from TEXT          Start date (YYYY-MM-DD). Requires --to.
   --to TEXT            End date (YYYY-MM-DD). Requires --from.
   --ytd                Year to date (Jan 1 to today)
   --alltime            All transactions (full history)
   -n, --limit INT      Maximum transactions to return [default: all]
-  -s, --sort TEXT      Sort order: ASC or DESC [default: DESC]
+  --sort TEXT          Sort order: ASC or DESC [default: DESC]
   -o, --output [table|json|csv]  Output format [default: table]
 ```
 
@@ -619,6 +659,9 @@ etrade-cli transactions list abc123 --ytd
 
 # Full history
 etrade-cli transactions list abc123 --alltime
+
+# Filter by symbol
+etrade-cli transactions list abc123 --ytd --symbol AAPL
 
 # Date range (both required)
 etrade-cli transactions list abc123 --from 2024-01-01 --to 2024-12-31

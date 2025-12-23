@@ -20,6 +20,12 @@ async def list_transactions(
         ...,
         help="Account ID key.",
     ),
+    symbol: str | None = typer.Option(
+        None,
+        "--symbol",
+        "-s",
+        help="Filter by symbol.",
+    ),
     from_date: str | None = typer.Option(
         None,
         "--from",
@@ -49,7 +55,6 @@ async def list_transactions(
     sort: str = typer.Option(
         "DESC",
         "--sort",
-        "-s",
         help="Sort order: ASC or DESC.",
     ),
     output: OutputFormat = typer.Option(
@@ -70,6 +75,12 @@ async def list_transactions(
     start_date = None
     end_date = None
     today = date.today()
+
+    # Validate mutually exclusive date options
+    date_options_count = sum([ytd, alltime, bool(from_date or to_date)])
+    if date_options_count > 1:
+        print_error("Options --ytd, --alltime, and --from/--to are mutually exclusive.")
+        raise typer.Exit(1)
 
     # Handle convenience date options
     if ytd:
@@ -100,14 +111,26 @@ async def list_transactions(
 
         # Collect transactions up to limit
         transactions = []
+        count = 0
         async for tx in client.accounts.iter_transactions(
             account_id,
             start_date=start_date,
             end_date=end_date,
             sort_order=sort.upper(),
-            limit=limit,
+            limit=None,  # We filter ourselves when symbol is specified
         ):
+            # Filter by symbol if specified
+            if symbol:
+                tx_symbol = tx.brokerage.product.symbol if tx.brokerage and tx.brokerage.product else None
+                if not tx_symbol or tx_symbol.upper() != symbol.upper():
+                    continue
+
             transactions.append(tx)
+            count += 1
+
+            # Check limit
+            if limit is not None and count >= limit:
+                break
 
         if not transactions:
             format_output([], output, title="Transactions")

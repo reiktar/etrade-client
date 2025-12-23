@@ -76,12 +76,12 @@ class TestTransactionIterator:
     async def test_passes_marker_to_next_page(self, accounts_api) -> None:
         """Should pass marker from previous page to fetch next."""
         page1 = MagicMock()
-        page1.transactions = [MagicMock(spec=Transaction)]
+        page1.transactions = [MagicMock(spec=Transaction, transaction_id="tx1")]
         page1.has_more = True
         page1.marker = "next_page_token"
 
         page2 = MagicMock()
-        page2.transactions = [MagicMock(spec=Transaction)]
+        page2.transactions = [MagicMock(spec=Transaction, transaction_id="tx2")]
         page2.has_more = False
         page2.marker = None
 
@@ -120,12 +120,12 @@ class TestTransactionIterator:
     async def test_limit_spans_multiple_pages(self, accounts_api) -> None:
         """Should respect limit even when spanning multiple pages."""
         page1 = MagicMock()
-        page1.transactions = [MagicMock(spec=Transaction) for _ in range(3)]
+        page1.transactions = [MagicMock(spec=Transaction, transaction_id=f"p1-{i}") for i in range(3)]
         page1.has_more = True
         page1.marker = "page2"
 
         page2 = MagicMock()
-        page2.transactions = [MagicMock(spec=Transaction) for _ in range(3)]
+        page2.transactions = [MagicMock(spec=Transaction, transaction_id=f"p2-{i}") for i in range(3)]
         page2.has_more = False
         page2.marker = None
 
@@ -271,12 +271,12 @@ class TestPaginationBehavior:
     async def test_lazy_loading_does_not_fetch_ahead(self, accounts_api) -> None:
         """Pagination should be lazy - no fetching until consumed."""
         page1 = MagicMock()
-        page1.transactions = [MagicMock(spec=Transaction)]
+        page1.transactions = [MagicMock(spec=Transaction, transaction_id="tx1")]
         page1.has_more = True
         page1.marker = "page2"
 
         page2 = MagicMock()
-        page2.transactions = [MagicMock(spec=Transaction)]
+        page2.transactions = [MagicMock(spec=Transaction, transaction_id="tx2")]
         page2.has_more = False
 
         accounts_api.list_transactions = AsyncMock(side_effect=[page1, page2])
@@ -297,7 +297,7 @@ class TestPaginationBehavior:
     async def test_stops_on_has_more_false(self, accounts_api) -> None:
         """Should stop fetching when has_more becomes False."""
         page = MagicMock()
-        page.transactions = [MagicMock(spec=Transaction)]
+        page.transactions = [MagicMock(spec=Transaction, transaction_id="tx1")]
         page.has_more = False
         page.marker = "ignored"  # Marker exists but has_more is False
 
@@ -314,7 +314,7 @@ class TestPaginationBehavior:
     async def test_stops_on_no_marker(self, accounts_api) -> None:
         """Should stop when marker is None even if has_more is somehow True."""
         page = MagicMock()
-        page.transactions = [MagicMock(spec=Transaction)]
+        page.transactions = [MagicMock(spec=Transaction, transaction_id="tx1")]
         page.has_more = True
         page.marker = None  # No marker despite has_more=True
 
@@ -331,12 +331,12 @@ class TestPaginationBehavior:
     async def test_early_break_stops_fetching(self, accounts_api) -> None:
         """Breaking early should prevent additional API calls."""
         page1 = MagicMock()
-        page1.transactions = [MagicMock(spec=Transaction)]
+        page1.transactions = [MagicMock(spec=Transaction, transaction_id="tx1")]
         page1.has_more = True
         page1.marker = "page2"
 
         page2 = MagicMock()
-        page2.transactions = [MagicMock(spec=Transaction)]
+        page2.transactions = [MagicMock(spec=Transaction, transaction_id="tx2")]
         page2.has_more = False
 
         accounts_api.list_transactions = AsyncMock(side_effect=[page1, page2])

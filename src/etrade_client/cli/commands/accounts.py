@@ -192,6 +192,16 @@ async def list_dividends(
         "--alltime",
         help="All dividends (full history).",
     ),
+    by_symbol: bool = typer.Option(
+        False,
+        "--by-symbol",
+        help="Group totals by symbol.",
+    ),
+    by_month: bool = typer.Option(
+        False,
+        "--by-month",
+        help="Group totals by year-month.",
+    ),
     limit: int | None = typer.Option(
         None,
         "--limit",
@@ -212,6 +222,8 @@ async def list_dividends(
 
     Shows both cash dividends and DRIP (dividend reinvestment) transactions.
     DRIP transactions show as negative amounts with shares purchased.
+
+    Use --by-symbol and/or --by-month to group and summarize dividends.
     """
     config: CLIConfig = ctx.obj
 
@@ -219,6 +231,12 @@ async def list_dividends(
     start_date = None
     end_date = None
     today = date.today()
+
+    # Validate mutually exclusive date options
+    date_options_count = sum([ytd, alltime, bool(from_date or to_date)])
+    if date_options_count > 1:
+        print_error("Options --ytd, --alltime, and --from/--to are mutually exclusive.")
+        raise typer.Exit(1)
 
     # Handle convenience date options
     if ytd:
@@ -287,13 +305,27 @@ async def list_dividends(
                 by_date_symbol[key]["reinvestments"].append(tx)
 
         if not by_date_symbol:
-            format_output([], output, title="Dividends")
+            title = "Dividends"
+            if by_symbol and by_month:
+                title = "Dividends by Month and Symbol"
+            elif by_symbol:
+                title = "Dividends by Symbol"
+            elif by_month:
+                title = "Dividends by Month"
+            format_output([], output, title=title)
             return
 
         # Process into consolidated rows, matching dividends with reinvestments
-        dividend_data = []
+        # Also track data for grouping
+        dividend_rows: list[dict] = []
         total_dividends = Decimal("0")
         total_reinvested = Decimal("0")
+
+        # For grouping: track amounts by group key
+        # Key format depends on grouping: (month,), (symbol,), or (month, symbol)
+        group_totals: dict[tuple, dict] = defaultdict(
+            lambda: {"amount": Decimal("0"), "reinvested": Decimal("0"), "cash": Decimal("0"), "count": 0}
+        )
 
         # Sort by date descending
         sorted_keys = sorted(by_date_symbol.keys(), key=lambda k: k[0], reverse=True)
@@ -303,6 +335,9 @@ async def list_dividends(
             group = by_date_symbol[key]
             dividends = group["dividends"]
             reinvestments = group["reinvestments"]
+
+            # Extract year-month for grouping
+            year_month = date_str[:7] if date_str else ""  # "YYYY-MM"
 
             # Match each dividend with a reinvestment by closest amount
             # (E*Trade reinvestment amounts may differ slightly due to rounding)
@@ -332,6 +367,25 @@ async def list_dividends(
                         used_reinvestments.add(best_match.transaction_id)
                         total_reinvested += div_amount
 
+                # Update group totals
+                if by_symbol and by_month:
+                    group_key = (year_month, tx_symbol)
+                elif by_month:
+                    group_key = (year_month,)
+                elif by_symbol:
+                    group_key = (tx_symbol,)
+                else:
+                    group_key = None
+
+                if group_key is not None:
+                    group_totals[group_key]["amount"] += div_amount
+                    group_totals[group_key]["count"] += 1
+                    if is_drip:
+                        group_totals[group_key]["reinvested"] += div_amount
+                    else:
+                        group_totals[group_key]["cash"] += div_amount
+
+                # Build individual row (for non-grouped output)
                 row = {
                     "date": date_str,
                     "symbol": tx_symbol,
@@ -348,24 +402,170 @@ async def list_dividends(
                     if best_match.brokerage.price:
                         row["price"] = f"${best_match.brokerage.price:,.2f}"
 
-                dividend_data.append(row)
+                dividend_rows.append(row)
 
-                # Check limit
-                if limit is not None and len(dividend_data) >= limit:
+                # Check limit (only for non-grouped output)
+                if not (by_symbol or by_month):
+                    if limit is not None and len(dividend_rows) >= limit:
+                        break
+
+            if not (by_symbol or by_month):
+                if limit is not None and len(dividend_rows) >= limit:
                     break
 
-            if limit is not None and len(dividend_data) >= limit:
-                break
+        # Output based on grouping mode
+        if by_symbol or by_month:
+            # Build grouped output
+            grouped_data: list[dict] = []
 
-        # Add summary row for table output
-        if output == OutputFormat.TABLE and len(dividend_data) > 1:
-            dividend_data.append({
-                "date": "---",
-                "symbol": "TOTAL",
-                "amount": f"${total_dividends:,.2f}",
-                "drip": f"(${total_reinvested:,.2f} reinvested)",
-                "shares": "",
-                "price": "",
-            })
+            if by_symbol and by_month:
+                # Group by month, then symbol within month
+                # Sort by month desc, then symbol asc
+                sorted_group_keys = sorted(
+                    group_totals.keys(),
+                    key=lambda k: (k[0], k[1]),  # (month, symbol)
+                    reverse=True,
+                )
+                # Re-sort to have symbols in ascending order within each month
+                sorted_group_keys = sorted(
+                    sorted_group_keys,
+                    key=lambda k: (-int(k[0].replace("-", "")), k[1]),  # month desc, symbol asc
+                )
 
-        format_output(dividend_data, output, title="Dividends")
+                current_month = None
+                month_total = Decimal("0")
+                month_reinvested = Decimal("0")
+                month_cash = Decimal("0")
+
+                for gkey in sorted_group_keys:
+                    month, sym = gkey
+                    totals = group_totals[gkey]
+
+                    # Add month subtotal when month changes
+                    if current_month is not None and month != current_month:
+                        if output == OutputFormat.TABLE:
+                            grouped_data.append({
+                                "month": "",
+                                "symbol": f"  {current_month} Total",
+                                "amount": f"${month_total:,.2f}",
+                                "reinvested": f"${month_reinvested:,.2f}",
+                                "cash": f"${month_cash:,.2f}",
+                                "count": "",
+                            })
+                        month_total = Decimal("0")
+                        month_reinvested = Decimal("0")
+                        month_cash = Decimal("0")
+
+                    current_month = month
+                    month_total += totals["amount"]
+                    month_reinvested += totals["reinvested"]
+                    month_cash += totals["cash"]
+
+                    grouped_data.append({
+                        "month": month,
+                        "symbol": sym,
+                        "amount": f"${totals['amount']:,.2f}",
+                        "reinvested": f"${totals['reinvested']:,.2f}",
+                        "cash": f"${totals['cash']:,.2f}",
+                        "count": totals["count"],
+                    })
+
+                # Add final month subtotal
+                if current_month is not None and output == OutputFormat.TABLE:
+                    grouped_data.append({
+                        "month": "",
+                        "symbol": f"  {current_month} Total",
+                        "amount": f"${month_total:,.2f}",
+                        "reinvested": f"${month_reinvested:,.2f}",
+                        "cash": f"${month_cash:,.2f}",
+                        "count": "",
+                    })
+
+                # Add grand total
+                total_cash = total_dividends - total_reinvested
+                if output == OutputFormat.TABLE and len(grouped_data) > 1:
+                    grouped_data.append({
+                        "month": "---",
+                        "symbol": "TOTAL",
+                        "amount": f"${total_dividends:,.2f}",
+                        "reinvested": f"${total_reinvested:,.2f}",
+                        "cash": f"${total_cash:,.2f}",
+                        "count": "",
+                    })
+
+                format_output(grouped_data, output, title="Dividends by Month and Symbol")
+
+            elif by_month:
+                # Group by month only
+                sorted_group_keys = sorted(group_totals.keys(), reverse=True)
+
+                for gkey in sorted_group_keys:
+                    (month,) = gkey
+                    totals = group_totals[gkey]
+                    grouped_data.append({
+                        "month": month,
+                        "amount": f"${totals['amount']:,.2f}",
+                        "reinvested": f"${totals['reinvested']:,.2f}",
+                        "cash": f"${totals['cash']:,.2f}",
+                        "count": totals["count"],
+                    })
+
+                # Add total row
+                total_cash = total_dividends - total_reinvested
+                if output == OutputFormat.TABLE and len(grouped_data) > 1:
+                    grouped_data.append({
+                        "month": "TOTAL",
+                        "amount": f"${total_dividends:,.2f}",
+                        "reinvested": f"${total_reinvested:,.2f}",
+                        "cash": f"${total_cash:,.2f}",
+                        "count": "",
+                    })
+
+                format_output(grouped_data, output, title="Dividends by Month")
+
+            else:  # by_symbol only
+                # Group by symbol only - sort by total amount descending
+                sorted_group_keys = sorted(
+                    group_totals.keys(),
+                    key=lambda k: group_totals[k]["amount"],
+                    reverse=True,
+                )
+
+                for gkey in sorted_group_keys:
+                    (sym,) = gkey
+                    totals = group_totals[gkey]
+                    grouped_data.append({
+                        "symbol": sym,
+                        "amount": f"${totals['amount']:,.2f}",
+                        "reinvested": f"${totals['reinvested']:,.2f}",
+                        "cash": f"${totals['cash']:,.2f}",
+                        "count": totals["count"],
+                    })
+
+                # Add total row
+                total_cash = total_dividends - total_reinvested
+                if output == OutputFormat.TABLE and len(grouped_data) > 1:
+                    grouped_data.append({
+                        "symbol": "TOTAL",
+                        "amount": f"${total_dividends:,.2f}",
+                        "reinvested": f"${total_reinvested:,.2f}",
+                        "cash": f"${total_cash:,.2f}",
+                        "count": "",
+                    })
+
+                format_output(grouped_data, output, title="Dividends by Symbol")
+
+        else:
+            # Non-grouped output (original behavior)
+            # Add summary row for table output
+            if output == OutputFormat.TABLE and len(dividend_rows) > 1:
+                dividend_rows.append({
+                    "date": "---",
+                    "symbol": "TOTAL",
+                    "amount": f"${total_dividends:,.2f}",
+                    "drip": f"(${total_reinvested:,.2f} reinvested)",
+                    "shares": "",
+                    "price": "",
+                })
+
+            format_output(dividend_rows, output, title="Dividends")

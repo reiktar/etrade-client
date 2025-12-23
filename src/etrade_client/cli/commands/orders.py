@@ -76,6 +76,12 @@ async def list_orders(
     end_date = None
     today = date.today()
 
+    # Validate mutually exclusive date options
+    date_options_count = sum([ytd, alltime, bool(from_date or to_date)])
+    if date_options_count > 1:
+        print_error("Options --ytd, --alltime, and --from/--to are mutually exclusive.")
+        raise typer.Exit(1)
+
     # Handle convenience date options
     if ytd:
         start_date = date(today.year, 1, 1)
