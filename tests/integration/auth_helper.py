@@ -131,7 +131,7 @@ async def run_oauth_flow() -> None:
     print()
     print("Step 3: Exchanging for access token...")
     try:
-        access_token = await client.auth.get_access_token(verifier)
+        await client.auth.get_access_token(verifier)
     except Exception as e:
         print(f"Error getting access token: {e}")
         sys.exit(1)

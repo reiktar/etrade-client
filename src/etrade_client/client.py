@@ -1,6 +1,7 @@
 """Main E*Trade client."""
 
-from types import TracebackType
+
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -11,6 +12,9 @@ from etrade_client.api.orders import OrdersAPI
 from etrade_client.auth import ETradeAuth, TokenStore
 from etrade_client.config import ETradeConfig
 from etrade_client.models.auth import AccessToken
+
+if TYPE_CHECKING:
+    from types import TracebackType
 
 
 class ETradeClient:
@@ -99,7 +103,7 @@ class ETradeClient:
             await self._http_client.aclose()
             self._set_http_client(None)
 
-    async def __aenter__(self) -> "ETradeClient":
+    async def __aenter__(self) -> ETradeClient:
         """Async context manager entry - opens connection pool."""
         await self.open()
         return self

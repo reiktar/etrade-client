@@ -19,7 +19,9 @@ def config() -> ETradeConfig:
     )
 
 
-def make_response(status_code: int, json_data: dict | None = None, headers: dict | None = None) -> httpx.Response:
+def make_response(
+    status_code: int, json_data: dict | None = None, headers: dict | None = None
+) -> httpx.Response:
     """Create a mock httpx.Response."""
     response = MagicMock(spec=httpx.Response)
     response.status_code = status_code

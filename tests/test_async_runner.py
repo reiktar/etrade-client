@@ -1,7 +1,5 @@
 """Tests for async_runner module."""
 
-import pytest
-
 from etrade_client.cli.async_runner import _is_token_invalid_error
 from etrade_client.exceptions import ETradeAPIError
 

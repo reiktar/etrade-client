@@ -67,9 +67,13 @@ async def list_alerts(
         alerts_data = [
             {
                 "id": alert.alert_id,
-                "subject": (alert.subject[:40] + "...") if alert.subject and len(alert.subject) > 40 else (alert.subject or ""),
+                "subject": (alert.subject[:40] + "...")
+                if alert.subject and len(alert.subject) > 40
+                else (alert.subject or ""),
                 "status": alert.status or "",
-                "created": alert.create_time.strftime("%Y-%m-%d %H:%M") if alert.create_time else "",
+                "created": alert.create_time.strftime("%Y-%m-%d %H:%M")
+                if alert.create_time
+                else "",
             }
             for alert in response.alerts
         ]

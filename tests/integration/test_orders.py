@@ -2,7 +2,6 @@
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -31,7 +30,9 @@ class TestOrdersAPI:
         assert hasattr(orders_response, "orders")
 
     @pytest.mark.xfail(reason="Sandbox returns 500 error when filtering by status")
-    async def test_list_orders_with_filters(self, async_integration_client, analyze_response) -> None:
+    async def test_list_orders_with_filters(
+        self, async_integration_client, analyze_response
+    ) -> None:
         """Should filter orders by status."""
         client = async_integration_client
 

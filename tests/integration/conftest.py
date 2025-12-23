@@ -24,8 +24,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.integration.field_analyzer import FieldAnalysisCollector, FieldPresenceAnalyzer
 from tests.integration.endpoint_field_analyzer import EndpointFieldAnalyzer
+from tests.integration.field_analyzer import FieldAnalysisCollector, FieldPresenceAnalyzer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -198,10 +198,7 @@ async def async_integration_client(
     elif client.load_token():
         pass
     else:
-        pytest.skip(
-            "No access tokens available. "
-            "Run: python -m tests.integration.auth_helper"
-        )
+        pytest.skip("No access tokens available. Run: python -m tests.integration.auth_helper")
 
     yield client
 
@@ -228,8 +225,10 @@ def analyze_response(
     The analysis results are collected and summarized at session end.
     """
     if request.node.get_closest_marker("no_field_analysis"):
+
         def _noop(model_instance: BaseModel, endpoint: str) -> None:
             pass
+
         return _noop
 
     def _analyze(model_instance: BaseModel, endpoint: str) -> None:

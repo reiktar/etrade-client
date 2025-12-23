@@ -2,7 +2,6 @@
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -23,7 +22,9 @@ class TestAlertsAPI:
         assert alerts_response is not None
         assert hasattr(alerts_response, "alerts")
 
-    async def test_list_alerts_with_category_filter(self, async_integration_client, analyze_response) -> None:
+    async def test_list_alerts_with_category_filter(
+        self, async_integration_client, analyze_response
+    ) -> None:
         """Should filter alerts by category."""
         client = async_integration_client
 
@@ -41,7 +42,9 @@ class TestAlertsAPI:
         for alert in account_alerts.alerts:
             analyze_response(alert, "alerts/list/ACCOUNT/Alert")
 
-    async def test_list_alerts_with_status_filter(self, async_integration_client, analyze_response) -> None:
+    async def test_list_alerts_with_status_filter(
+        self, async_integration_client, analyze_response
+    ) -> None:
         """Should filter alerts by status."""
         client = async_integration_client
 

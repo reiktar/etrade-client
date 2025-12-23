@@ -3,8 +3,6 @@
 from datetime import date
 from decimal import Decimal
 
-import pytest
-
 from etrade_client.models.market import (
     AllQuoteDetails,
     OptionChain,
@@ -420,9 +418,7 @@ class TestOptionExpireDate:
     def test_parses_expiration_without_type(self) -> None:
         """Should handle missing expiryType."""
         data = {
-            "OptionExpireDateResponse": {
-                "ExpirationDate": {"year": 2025, "month": 1, "day": 17}
-            }
+            "OptionExpireDateResponse": {"ExpirationDate": {"year": 2025, "month": 1, "day": 17}}
         }
 
         result = OptionExpireDate.from_api_response(data)

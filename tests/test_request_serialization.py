@@ -8,11 +8,9 @@ import pytest
 from etrade_client.api.orders import OrdersAPI
 from etrade_client.builders import (
     EquityOrderBuilder,
-    MarketSession,
     OptionOrderBuilder,
     OptionType,
     OrderAction,
-    OrderTerm,
     PriceType,
 )
 
@@ -265,12 +263,14 @@ class TestAPIRequestBuilding:
         config = MagicMock()
         auth = MagicMock()
         api = OrdersAPI(config, auth)
-        api._post = AsyncMock(return_value={
-            "PreviewOrderResponse": {
-                "orderType": "EQ",
-                "PreviewIds": [{"previewId": 123}],
+        api._post = AsyncMock(
+            return_value={
+                "PreviewOrderResponse": {
+                    "orderType": "EQ",
+                    "PreviewIds": [{"previewId": 123}],
+                }
             }
-        })
+        )
         return api
 
     @pytest.mark.asyncio

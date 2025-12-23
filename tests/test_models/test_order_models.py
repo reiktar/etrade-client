@@ -2,8 +2,6 @@
 
 from decimal import Decimal
 
-import pytest
-
 from etrade_client.models.orders import (
     OrderListResponse,
     OrderPreviewResponse,
@@ -228,9 +226,7 @@ class TestOrderPreviewResponse:
                     {"previewId": 123456},
                     {"previewId": 123457},
                 ],
-                "Order": [
-                    {"priceType": "LIMIT", "limitPrice": "150.00"}
-                ],
+                "Order": [{"priceType": "LIMIT", "limitPrice": "150.00"}],
             }
         }
 
@@ -265,9 +261,7 @@ class TestPlaceOrderResponse:
                 "orderId": 12345,
                 "orderNum": 1,
                 "placedTime": "2025-01-15T10:30:00",
-                "Order": [
-                    {"status": "OPEN"}
-                ],
+                "Order": [{"status": "OPEN"}],
             }
         }
 

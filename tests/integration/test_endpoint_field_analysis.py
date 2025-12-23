@@ -10,13 +10,17 @@ in each response, grouped by endpoint. This helps identify:
 Run with: pytest tests/integration/test_endpoint_field_analysis.py -v -s
 """
 
+from typing import TYPE_CHECKING
+
 import pytest
-from pydantic import BaseModel
 
 from etrade_client.models.accounts import Account, AccountBalance, CashBalance, ComputedBalance
-from etrade_client.models.market import Quote, AllQuoteDetails
-from tests.integration.endpoint_field_analyzer import EndpointFieldAnalyzer
+from etrade_client.models.market import AllQuoteDetails, Quote
 
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+
+    from tests.integration.endpoint_field_analyzer import EndpointFieldAnalyzer
 
 pytestmark = pytest.mark.integration
 
@@ -43,7 +47,7 @@ class TestEndpointFieldAnalysis:
         client = async_integration_client
 
         # Get raw response
-        last_response = field_collector.response_capture.get_last_response()
+        field_collector.response_capture.get_last_response()
 
         # Call the endpoint
         response = await client.accounts.list_accounts()
@@ -54,8 +58,7 @@ class TestEndpointFieldAnalysis:
         if current_response and current_response.raw_json:
             # Extract raw account data
             accounts_data = (
-                current_response.raw_json
-                .get("AccountListResponse", {})
+                current_response.raw_json.get("AccountListResponse", {})
                 .get("Accounts", {})
                 .get("Account", [])
             )
@@ -135,7 +138,7 @@ class TestEndpointFieldAnalysis:
         """Analyze PortfolioPosition model fields from get_portfolio endpoint."""
         client = async_integration_client
 
-        from etrade_client.models.accounts import PortfolioPosition, Product, PositionQuick
+        from etrade_client.models.accounts import PortfolioPosition, PositionQuick, Product
 
         # First get an account
         accounts_response = await client.accounts.list_accounts()
@@ -144,7 +147,7 @@ class TestEndpointFieldAnalysis:
         account = accounts_response.accounts[0]
 
         # Get portfolio
-        portfolio_response = await client.accounts.get_portfolio(account.account_id_key)
+        await client.accounts.get_portfolio(account.account_id_key)
 
         # Get raw response
         current_response = field_collector.response_capture.get_last_response()
@@ -247,7 +250,7 @@ class TestEndpointFieldAnalysis:
         account = accounts_response.accounts[0]
 
         # Get transactions (via accounts API)
-        tx_response = await client.accounts.list_transactions(account.account_id_key)
+        await client.accounts.list_transactions(account.account_id_key)
 
         # Get raw response
         current_response = field_collector.response_capture.get_last_response()
@@ -275,9 +278,7 @@ class TestEndpointFieldAnalysis:
         """Analyze Order model fields from list_orders endpoint."""
         client = async_integration_client
 
-        from etrade_client.models.orders import (
-            Order, OrderDetail, OrderInstrument, OrderProduct
-        )
+        from etrade_client.models.orders import Order, OrderDetail, OrderInstrument, OrderProduct
 
         # First get an account
         accounts_response = await client.accounts.list_accounts()
@@ -287,7 +288,7 @@ class TestEndpointFieldAnalysis:
 
         # Get orders
         try:
-            orders_response = await client.orders.list_orders(account.account_id_key)
+            await client.orders.list_orders(account.account_id_key)
         except Exception:
             # Orders endpoint may fail in sandbox
             pytest.skip("Orders endpoint not available in sandbox")
@@ -356,7 +357,7 @@ class TestEndpointFieldAnalysis:
 
         # Get alerts
         try:
-            alerts_response = await client.alerts.list_alerts()
+            await client.alerts.list_alerts()
         except Exception:
             pytest.skip("Alerts endpoint not available")
             return
@@ -397,7 +398,7 @@ class TestEndpointFieldAnalysis:
                 return
 
             # Get option chains for first expiry
-            chains_response = await client.market.get_option_chains(
+            await client.market.get_option_chains(
                 "AAPL",
                 expiry_date=expiry_dates[0].expiry_date,
             )

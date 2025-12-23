@@ -4,7 +4,6 @@ import pytest
 
 from etrade_client.builders import (
     EquityOrderBuilder,
-    MarketSession,
     OptionOrderBuilder,
     OptionType,
     OrderAction,

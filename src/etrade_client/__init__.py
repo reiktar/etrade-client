@@ -57,24 +57,24 @@ from etrade_client.exceptions import (
 __version__ = "0.1.0"
 
 __all__ = [
+    # Exceptions
+    "ETradeAPIError",
+    "ETradeAuthError",
+    # Main client
+    "ETradeClient",
+    "ETradeConfig",
+    "ETradeError",
+    "ETradeRateLimitError",
+    "ETradeTokenError",
+    "ETradeValidationError",
     # Builders
     "EquityOrderBuilder",
-    "OptionOrderBuilder",
     # Enums (commonly used)
     "MarketSession",
+    "OptionOrderBuilder",
     "OptionType",
     "OrderAction",
     "OrderTerm",
     "OrderType",
     "PriceType",  # Backwards compatibility alias for OrderType
-    # Main client
-    "ETradeClient",
-    "ETradeConfig",
-    # Exceptions
-    "ETradeAPIError",
-    "ETradeAuthError",
-    "ETradeError",
-    "ETradeRateLimitError",
-    "ETradeTokenError",
-    "ETradeValidationError",
 ]

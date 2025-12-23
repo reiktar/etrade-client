@@ -2,8 +2,6 @@
 
 from decimal import Decimal
 
-import pytest
-
 from etrade_client.models.accounts import (
     AccountListResponse,
     BalanceResponse,

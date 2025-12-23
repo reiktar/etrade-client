@@ -55,12 +55,24 @@ async def get_quote(
         quotes_data = [
             {
                 "symbol": quote.product.symbol if quote.product else "",
-                "last": f"${quote.all_data.last_trade:,.2f}" if quote.all_data and quote.all_data.last_trade else "N/A",
-                "change": f"{quote.all_data.change_close:+,.2f}" if quote.all_data and quote.all_data.change_close else "N/A",
-                "change_pct": f"{quote.all_data.change_close_pct:+.2f}%" if quote.all_data and quote.all_data.change_close_pct else "N/A",
-                "bid": f"${quote.all_data.bid:,.2f}" if quote.all_data and quote.all_data.bid else "N/A",
-                "ask": f"${quote.all_data.ask:,.2f}" if quote.all_data and quote.all_data.ask else "N/A",
-                "volume": f"{quote.all_data.total_volume:,}" if quote.all_data and quote.all_data.total_volume else "N/A",
+                "last": f"${quote.all_data.last_trade:,.2f}"
+                if quote.all_data and quote.all_data.last_trade
+                else "N/A",
+                "change": f"{quote.all_data.change_close:+,.2f}"
+                if quote.all_data and quote.all_data.change_close
+                else "N/A",
+                "change_pct": f"{quote.all_data.change_close_pct:+.2f}%"
+                if quote.all_data and quote.all_data.change_close_pct
+                else "N/A",
+                "bid": f"${quote.all_data.bid:,.2f}"
+                if quote.all_data and quote.all_data.bid
+                else "N/A",
+                "ask": f"${quote.all_data.ask:,.2f}"
+                if quote.all_data and quote.all_data.ask
+                else "N/A",
+                "volume": f"{quote.all_data.total_volume:,}"
+                if quote.all_data and quote.all_data.total_volume
+                else "N/A",
             }
             for quote in response.quotes
         ]
@@ -212,24 +224,32 @@ async def options_chain(
         chain_data = []
         for pair in chain.option_pairs:
             if pair.call:
-                chain_data.append({
-                    "type": "CALL",
-                    "strike": f"${pair.call.strike_price:,.2f}" if pair.call.strike_price else "N/A",
-                    "bid": f"${pair.call.bid:,.2f}" if pair.call.bid else "N/A",
-                    "ask": f"${pair.call.ask:,.2f}" if pair.call.ask else "N/A",
-                    "last": f"${pair.call.last_price:,.2f}" if pair.call.last_price else "N/A",
-                    "volume": pair.call.volume or 0,
-                    "open_interest": pair.call.open_interest or 0,
-                })
+                chain_data.append(
+                    {
+                        "type": "CALL",
+                        "strike": f"${pair.call.strike_price:,.2f}"
+                        if pair.call.strike_price
+                        else "N/A",
+                        "bid": f"${pair.call.bid:,.2f}" if pair.call.bid else "N/A",
+                        "ask": f"${pair.call.ask:,.2f}" if pair.call.ask else "N/A",
+                        "last": f"${pair.call.last_price:,.2f}" if pair.call.last_price else "N/A",
+                        "volume": pair.call.volume or 0,
+                        "open_interest": pair.call.open_interest or 0,
+                    }
+                )
             if pair.put:
-                chain_data.append({
-                    "type": "PUT",
-                    "strike": f"${pair.put.strike_price:,.2f}" if pair.put.strike_price else "N/A",
-                    "bid": f"${pair.put.bid:,.2f}" if pair.put.bid else "N/A",
-                    "ask": f"${pair.put.ask:,.2f}" if pair.put.ask else "N/A",
-                    "last": f"${pair.put.last_price:,.2f}" if pair.put.last_price else "N/A",
-                    "volume": pair.put.volume or 0,
-                    "open_interest": pair.put.open_interest or 0,
-                })
+                chain_data.append(
+                    {
+                        "type": "PUT",
+                        "strike": f"${pair.put.strike_price:,.2f}"
+                        if pair.put.strike_price
+                        else "N/A",
+                        "bid": f"${pair.put.bid:,.2f}" if pair.put.bid else "N/A",
+                        "ask": f"${pair.put.ask:,.2f}" if pair.put.ask else "N/A",
+                        "last": f"${pair.put.last_price:,.2f}" if pair.put.last_price else "N/A",
+                        "volume": pair.put.volume or 0,
+                        "open_interest": pair.put.open_interest or 0,
+                    }
+                )
 
         format_output(chain_data, output, title=f"Options Chain: {symbol.upper()} {expiry}")

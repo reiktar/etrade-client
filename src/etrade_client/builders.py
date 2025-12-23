@@ -17,9 +17,9 @@ PriceType = OrderType
 __all__ = [
     # Builders
     "EquityOrderBuilder",
-    "OptionOrderBuilder",
     # Re-exported enums
     "MarketSession",
+    "OptionOrderBuilder",
     "OptionType",
     "OrderAction",
     "OrderTerm",
@@ -62,51 +62,51 @@ class EquityOrderBuilder:
         self._client_order_id: str | None = None
 
     # Action methods
-    def buy(self, quantity: int) -> "EquityOrderBuilder":
+    def buy(self, quantity: int) -> EquityOrderBuilder:
         """Set action to BUY with quantity."""
         self._action = OrderAction.BUY
         self._quantity = quantity
         return self
 
-    def sell(self, quantity: int) -> "EquityOrderBuilder":
+    def sell(self, quantity: int) -> EquityOrderBuilder:
         """Set action to SELL with quantity."""
         self._action = OrderAction.SELL
         self._quantity = quantity
         return self
 
-    def sell_short(self, quantity: int) -> "EquityOrderBuilder":
+    def sell_short(self, quantity: int) -> EquityOrderBuilder:
         """Set action to SELL_SHORT with quantity."""
         self._action = OrderAction.SELL_SHORT
         self._quantity = quantity
         return self
 
-    def buy_to_cover(self, quantity: int) -> "EquityOrderBuilder":
+    def buy_to_cover(self, quantity: int) -> EquityOrderBuilder:
         """Set action to BUY_TO_COVER with quantity."""
         self._action = OrderAction.BUY_TO_COVER
         self._quantity = quantity
         return self
 
     # Price type methods
-    def market(self) -> "EquityOrderBuilder":
+    def market(self) -> EquityOrderBuilder:
         """Set as market order (default)."""
         self._price_type = PriceType.MARKET
         self._limit_price = None
         self._stop_price = None
         return self
 
-    def limit(self, price: float) -> "EquityOrderBuilder":
+    def limit(self, price: float) -> EquityOrderBuilder:
         """Set as limit order with specified price."""
         self._price_type = PriceType.LIMIT
         self._limit_price = price
         return self
 
-    def stop(self, price: float) -> "EquityOrderBuilder":
+    def stop(self, price: float) -> EquityOrderBuilder:
         """Set as stop order with specified trigger price."""
         self._price_type = PriceType.STOP
         self._stop_price = price
         return self
 
-    def stop_limit(self, stop_price: float, limit_price: float) -> "EquityOrderBuilder":
+    def stop_limit(self, stop_price: float, limit_price: float) -> EquityOrderBuilder:
         """Set as stop-limit order with trigger and limit prices."""
         self._price_type = PriceType.STOP_LIMIT
         self._stop_price = stop_price
@@ -114,44 +114,44 @@ class EquityOrderBuilder:
         return self
 
     # Order term methods
-    def good_for_day(self) -> "EquityOrderBuilder":
+    def good_for_day(self) -> EquityOrderBuilder:
         """Set order to expire at end of day (default)."""
         self._order_term = OrderTerm.GOOD_FOR_DAY
         return self
 
-    def good_until_cancel(self) -> "EquityOrderBuilder":
+    def good_until_cancel(self) -> EquityOrderBuilder:
         """Set order to remain active until cancelled."""
         self._order_term = OrderTerm.GOOD_UNTIL_CANCEL
         return self
 
-    def immediate_or_cancel(self) -> "EquityOrderBuilder":
+    def immediate_or_cancel(self) -> EquityOrderBuilder:
         """Set order to fill immediately or cancel."""
         self._order_term = OrderTerm.IMMEDIATE_OR_CANCEL
         return self
 
-    def fill_or_kill(self) -> "EquityOrderBuilder":
+    def fill_or_kill(self) -> EquityOrderBuilder:
         """Set order to fill completely or cancel entirely."""
         self._order_term = OrderTerm.FILL_OR_KILL
         return self
 
     # Session methods
-    def regular_session(self) -> "EquityOrderBuilder":
+    def regular_session(self) -> EquityOrderBuilder:
         """Execute during regular market hours (default)."""
         self._market_session = MarketSession.REGULAR
         return self
 
-    def extended_session(self) -> "EquityOrderBuilder":
+    def extended_session(self) -> EquityOrderBuilder:
         """Execute during extended market hours."""
         self._market_session = MarketSession.EXTENDED
         return self
 
     # Other options
-    def all_or_none(self, enabled: bool = True) -> "EquityOrderBuilder":
+    def all_or_none(self, enabled: bool = True) -> EquityOrderBuilder:
         """Set all-or-none flag."""
         self._all_or_none = enabled
         return self
 
-    def client_order_id(self, order_id: str) -> "EquityOrderBuilder":
+    def client_order_id(self, order_id: str) -> EquityOrderBuilder:
         """Set custom client order ID."""
         self._client_order_id = order_id
         return self
@@ -249,51 +249,51 @@ class OptionOrderBuilder:
         self._client_order_id: str | None = None
 
     # Action methods
-    def buy_to_open(self, quantity: int) -> "OptionOrderBuilder":
+    def buy_to_open(self, quantity: int) -> OptionOrderBuilder:
         """Open a new long position."""
         self._action = OrderAction.BUY_OPEN
         self._quantity = quantity
         return self
 
-    def sell_to_open(self, quantity: int) -> "OptionOrderBuilder":
+    def sell_to_open(self, quantity: int) -> OptionOrderBuilder:
         """Open a new short position (write)."""
         self._action = OrderAction.SELL_OPEN
         self._quantity = quantity
         return self
 
-    def buy_to_close(self, quantity: int) -> "OptionOrderBuilder":
+    def buy_to_close(self, quantity: int) -> OptionOrderBuilder:
         """Close an existing short position."""
         self._action = OrderAction.BUY_CLOSE
         self._quantity = quantity
         return self
 
-    def sell_to_close(self, quantity: int) -> "OptionOrderBuilder":
+    def sell_to_close(self, quantity: int) -> OptionOrderBuilder:
         """Close an existing long position."""
         self._action = OrderAction.SELL_CLOSE
         self._quantity = quantity
         return self
 
     # Price type methods (same as equity)
-    def market(self) -> "OptionOrderBuilder":
+    def market(self) -> OptionOrderBuilder:
         """Set as market order (default)."""
         self._price_type = PriceType.MARKET
         self._limit_price = None
         self._stop_price = None
         return self
 
-    def limit(self, price: float) -> "OptionOrderBuilder":
+    def limit(self, price: float) -> OptionOrderBuilder:
         """Set as limit order with specified price."""
         self._price_type = PriceType.LIMIT
         self._limit_price = price
         return self
 
-    def stop(self, price: float) -> "OptionOrderBuilder":
+    def stop(self, price: float) -> OptionOrderBuilder:
         """Set as stop order with specified trigger price."""
         self._price_type = PriceType.STOP
         self._stop_price = price
         return self
 
-    def stop_limit(self, stop_price: float, limit_price: float) -> "OptionOrderBuilder":
+    def stop_limit(self, stop_price: float, limit_price: float) -> OptionOrderBuilder:
         """Set as stop-limit order with trigger and limit prices."""
         self._price_type = PriceType.STOP_LIMIT
         self._stop_price = stop_price
@@ -301,44 +301,44 @@ class OptionOrderBuilder:
         return self
 
     # Order term methods
-    def good_for_day(self) -> "OptionOrderBuilder":
+    def good_for_day(self) -> OptionOrderBuilder:
         """Set order to expire at end of day (default)."""
         self._order_term = OrderTerm.GOOD_FOR_DAY
         return self
 
-    def good_until_cancel(self) -> "OptionOrderBuilder":
+    def good_until_cancel(self) -> OptionOrderBuilder:
         """Set order to remain active until cancelled."""
         self._order_term = OrderTerm.GOOD_UNTIL_CANCEL
         return self
 
-    def immediate_or_cancel(self) -> "OptionOrderBuilder":
+    def immediate_or_cancel(self) -> OptionOrderBuilder:
         """Set order to fill immediately or cancel."""
         self._order_term = OrderTerm.IMMEDIATE_OR_CANCEL
         return self
 
-    def fill_or_kill(self) -> "OptionOrderBuilder":
+    def fill_or_kill(self) -> OptionOrderBuilder:
         """Set order to fill completely or cancel entirely."""
         self._order_term = OrderTerm.FILL_OR_KILL
         return self
 
     # Session methods
-    def regular_session(self) -> "OptionOrderBuilder":
+    def regular_session(self) -> OptionOrderBuilder:
         """Execute during regular market hours (default)."""
         self._market_session = MarketSession.REGULAR
         return self
 
-    def extended_session(self) -> "OptionOrderBuilder":
+    def extended_session(self) -> OptionOrderBuilder:
         """Execute during extended market hours."""
         self._market_session = MarketSession.EXTENDED
         return self
 
     # Other options
-    def all_or_none(self, enabled: bool = True) -> "OptionOrderBuilder":
+    def all_or_none(self, enabled: bool = True) -> OptionOrderBuilder:
         """Set all-or-none flag."""
         self._all_or_none = enabled
         return self
 
-    def client_order_id(self, order_id: str) -> "OptionOrderBuilder":
+    def client_order_id(self, order_id: str) -> OptionOrderBuilder:
         """Set custom client order ID."""
         self._client_order_id = order_id
         return self

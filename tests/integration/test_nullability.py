@@ -6,6 +6,8 @@ to determine which fields are truly optional vs. required.
 Run with: pytest tests/integration/test_nullability.py -v -m integration -s
 """
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from etrade_client.models.accounts import (
@@ -22,8 +24,8 @@ from etrade_client.models.market import AllQuoteDetails, OptionDetails, Quote
 from etrade_client.models.orders import Order, OrderDetail, OrderInstrument
 from etrade_client.models.transactions import Transaction, TransactionBrokerage
 
-from tests.integration.field_analyzer import FieldPresenceAnalyzer
-
+if TYPE_CHECKING:
+    from tests.integration.field_analyzer import FieldPresenceAnalyzer
 
 pytestmark = [pytest.mark.integration, pytest.mark.nullability_analysis]
 
@@ -163,14 +165,13 @@ class TestNullabilityAnalysis:
     ) -> None:
         """Analyze OptionDetails model field presence."""
         client = async_integration_client
-        from datetime import date, timedelta
 
         # Get option expiration dates
         expiry_dates = await client.market.get_option_expire_dates("AAPL")
 
         if expiry_dates:
             expiry = expiry_dates[0].expiry_date
-            chain = await client.market.get_option_chains("AAPL", expiry)
+            await client.market.get_option_chains("AAPL", expiry)
 
             last_response = field_collector.response_capture.get_last_response()
             if last_response and last_response.raw_json:
@@ -199,7 +200,7 @@ class TestNullabilityAnalysis:
         accounts_response = await client.accounts.list_accounts()
         account = accounts_response.accounts[0]
 
-        orders_response = await client.orders.list_orders(account.account_id_key)
+        await client.orders.list_orders(account.account_id_key)
 
         last_response = field_collector.response_capture.get_last_response()
         if last_response and last_response.raw_json:
@@ -236,7 +237,7 @@ class TestNullabilityAnalysis:
         """Analyze Alert model field presence."""
         client = async_integration_client
 
-        alerts_response = await client.alerts.list_alerts()
+        await client.alerts.list_alerts()
 
         last_response = field_collector.response_capture.get_last_response()
         if last_response and last_response.raw_json:
@@ -263,7 +264,7 @@ class TestNullabilityAnalysis:
         account = accounts_response.accounts[0]
 
         # Use the accounts API to get transactions
-        tx_response = await client.accounts.list_transactions(account.account_id_key)
+        await client.accounts.list_transactions(account.account_id_key)
 
         last_response = field_collector.response_capture.get_last_response()
         if last_response and last_response.raw_json:

@@ -1,13 +1,13 @@
 """Tests for pagination iterators."""
 
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from etrade_client.api.accounts import AccountsAPI
 from etrade_client.api.orders import OrdersAPI
-from etrade_client.models.orders import Order, OrderDetail, OrderInstrument, OrderProduct
+from etrade_client.models.orders import Order
 from etrade_client.models.transactions import Transaction
 
 
@@ -100,9 +100,7 @@ class TestTransactionIterator:
         """Should stop yielding after limit is reached."""
         # Page with 5 transactions
         page = MagicMock()
-        page.transactions = [
-            MagicMock(spec=Transaction, transaction_id=f"tx{i}") for i in range(5)
-        ]
+        page.transactions = [MagicMock(spec=Transaction, transaction_id=f"tx{i}") for i in range(5)]
         page.has_more = True
         page.marker = "more"
 
@@ -120,12 +118,16 @@ class TestTransactionIterator:
     async def test_limit_spans_multiple_pages(self, accounts_api) -> None:
         """Should respect limit even when spanning multiple pages."""
         page1 = MagicMock()
-        page1.transactions = [MagicMock(spec=Transaction, transaction_id=f"p1-{i}") for i in range(3)]
+        page1.transactions = [
+            MagicMock(spec=Transaction, transaction_id=f"p1-{i}") for i in range(3)
+        ]
         page1.has_more = True
         page1.marker = "page2"
 
         page2 = MagicMock()
-        page2.transactions = [MagicMock(spec=Transaction, transaction_id=f"p2-{i}") for i in range(3)]
+        page2.transactions = [
+            MagicMock(spec=Transaction, transaction_id=f"p2-{i}") for i in range(3)
+        ]
         page2.has_more = False
         page2.marker = None
 
@@ -341,7 +343,7 @@ class TestPaginationBehavior:
 
         accounts_api.list_transactions = AsyncMock(side_effect=[page1, page2])
 
-        async for tx in accounts_api.iter_transactions("acc123"):
+        async for _tx in accounts_api.iter_transactions("acc123"):
             break  # Exit after first item
 
         # Should only fetch first page

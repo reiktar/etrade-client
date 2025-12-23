@@ -2,11 +2,8 @@
 
 from datetime import datetime
 
-import pytest
-
 from etrade_client.models.alerts import (
     Alert,
-    AlertDetail,
     AlertDetailResponse,
     AlertListResponse,
     DeleteAlertsResponse,

@@ -146,16 +146,18 @@ async def list_orders(
             if instrument and instrument.average_execution_price:
                 exec_price = f"${instrument.average_execution_price:,.2f}"
 
-            orders_data.append({
-                "order_id": order.order_id or "",
-                "symbol": product.symbol if product else "",
-                "action": instrument.order_action if instrument else "",
-                "qty": instrument.quantity if instrument else "",
-                "type": detail.order_type if detail else "",
-                "status": detail.status if detail else "",
-                "limit/stop": order_price,
-                "exec_price": exec_price,
-            })
+            orders_data.append(
+                {
+                    "order_id": order.order_id or "",
+                    "symbol": product.symbol if product else "",
+                    "action": instrument.order_action if instrument else "",
+                    "qty": instrument.quantity if instrument else "",
+                    "type": detail.order_type if detail else "",
+                    "status": detail.status if detail else "",
+                    "limit/stop": order_price,
+                    "exec_price": exec_price,
+                }
+            )
 
         format_output(orders_data, output, title="Orders")
 

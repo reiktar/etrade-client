@@ -10,16 +10,13 @@ This helps detect when E*Trade adds new fields to their API responses.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 
 # =============================================================================
 # Response Capture
@@ -67,17 +64,17 @@ class ResponseCapture:
         await response.aread()
 
         raw_json = None
-        try:
+        with contextlib.suppress(json.JSONDecodeError, ValueError):
             raw_json = response.json()
-        except (json.JSONDecodeError, ValueError):
-            pass
 
-        self.responses.append(CapturedResponse(
-            url=str(response.url),
-            method=response.request.method,
-            status_code=response.status_code,
-            raw_json=raw_json,
-        ))
+        self.responses.append(
+            CapturedResponse(
+                url=str(response.url),
+                method=response.request.method,
+                status_code=response.status_code,
+                raw_json=raw_json,
+            )
+        )
 
 
 # =============================================================================
@@ -156,11 +153,13 @@ class FieldAnalyzer:
             field_path = f"{path}.{key}" if path else key
 
             if key not in known_keys:
-                unknown.add(UnknownField(
-                    path=field_path,
-                    value_type=self._get_type_name(value),
-                    sample_value=self._truncate_value(value),
-                ))
+                unknown.add(
+                    UnknownField(
+                        path=field_path,
+                        value_type=self._get_type_name(value),
+                        sample_value=self._truncate_value(value),
+                    )
+                )
             else:
                 # Recurse into known fields
                 model_field_name = known_keys[key]
@@ -178,7 +177,7 @@ class FieldAnalyzer:
         if not isinstance(model_instance, list):
             return
 
-        for i, (raw_item, model_item) in enumerate(zip(raw_list, model_instance)):
+        for i, (raw_item, model_item) in enumerate(zip(raw_list, model_instance, strict=False)):
             self._compare_recursive(raw_item, model_item, f"{path}[{i}]", unknown)
 
     def _get_model_keys(self, model_class: type[BaseModel]) -> dict[str, str]:
@@ -518,9 +517,7 @@ class FieldPresenceAnalyzer:
         if model_name is None:
             model_name = model_class.__name__
 
-        self._model_observations[model_name] = (
-            self._model_observations.get(model_name, 0) + 1
-        )
+        self._model_observations[model_name] = self._model_observations.get(model_name, 0) + 1
 
         # Get all field names and their aliases
         for field_name, field_info in model_class.model_fields.items():
@@ -569,7 +566,9 @@ class FieldPresenceAnalyzer:
             key=lambda x: x.field_path,
         )
 
-    def get_sometimes_present_fields(self, model_name: str | None = None) -> list[FieldPresenceStats]:
+    def get_sometimes_present_fields(
+        self, model_name: str | None = None
+    ) -> list[FieldPresenceStats]:
         """Get fields that are sometimes present in API responses."""
         stats = self._stats.values()
         if model_name:
@@ -594,7 +593,7 @@ class FieldPresenceAnalyzer:
         lines = ["FIELD PRESENCE ANALYSIS", "=" * 70, ""]
 
         # Group by model
-        models = sorted(set(s.model_name for s in self._stats.values()))
+        models = sorted({s.model_name for s in self._stats.values()})
 
         for model_name in models:
             obs_count = self._model_observations.get(model_name, 0)
@@ -620,7 +619,9 @@ class FieldPresenceAnalyzer:
                     )
 
             if never:
-                lines.append(f"  NEVER PRESENT ({len(never)} fields) - may be deprecated/context-specific:")
+                lines.append(
+                    f"  NEVER PRESENT ({len(never)} fields) - may be deprecated/context-specific:"
+                )
                 for s in never:
                     lines.append(f"    ✗ {s.field_name}")
 

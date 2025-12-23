@@ -2,7 +2,6 @@
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -46,7 +45,10 @@ class TestAccountsAPI:
 
         assert balance_response.balance is not None
         # Cash balance is nested under balance.cash or balance.computed
-        assert balance_response.balance.cash is not None or balance_response.balance.computed is not None
+        assert (
+            balance_response.balance.cash is not None
+            or balance_response.balance.computed is not None
+        )
 
     async def test_get_portfolio(self, async_integration_client, analyze_response) -> None:
         """Should get portfolio from the sandbox."""

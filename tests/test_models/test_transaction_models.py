@@ -1,9 +1,6 @@
 """Tests for transaction model parsing."""
 
-from datetime import datetime
 from decimal import Decimal
-
-import pytest
 
 from etrade_client.models.transactions import Transaction, TransactionListResponse
 
@@ -160,9 +157,7 @@ class TestTransaction:
 
     def test_parses_with_optional_description2(self) -> None:
         """Should parse transaction with optional description2 field."""
-        data = _complete_transaction_data(
-            description2="Additional notes"
-        )
+        data = _complete_transaction_data(description2="Additional notes")
 
         tx = Transaction.model_validate(data)
 

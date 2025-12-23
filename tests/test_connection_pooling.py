@@ -1,6 +1,6 @@
 """Tests for connection pooling functionality."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -36,9 +36,7 @@ class TestContextManager:
         # After exiting, client should be None
         assert client._http_client is None
 
-    async def test_context_manager_propagates_to_api_modules(
-        self, config: ETradeConfig
-    ) -> None:
+    async def test_context_manager_propagates_to_api_modules(self, config: ETradeConfig) -> None:
         """Context manager should set http client on all API modules."""
         async with ETradeClient(config) as client:
             http_client = client._http_client
@@ -81,9 +79,7 @@ class TestExternalHttpClient:
         finally:
             await external_client.aclose()
 
-    async def test_external_client_not_closed_by_close_method(
-        self, config: ETradeConfig
-    ) -> None:
+    async def test_external_client_not_closed_by_close_method(self, config: ETradeConfig) -> None:
         """External http client should NOT be closed by explicit close() call."""
         external_client = httpx.AsyncClient(timeout=60.0)
         try:

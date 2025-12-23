@@ -52,9 +52,7 @@ class EndpointFieldStats:
         sometimes_present = []
         never_present = []
 
-        all_fields = set(self.field_counts.keys()) | set(
-            f for f in self.field_examples.keys()
-        )
+        all_fields = set(self.field_counts.keys()) | set(self.field_examples.keys())
 
         for field_name in sorted(all_fields):
             count = self.field_counts.get(field_name, 0)
@@ -133,9 +131,7 @@ class EndpointFieldAnalyzer:
         - Present sometimes within an endpoint (truly optional)
         """
         # Find all endpoints that use this model
-        relevant_stats = [
-            stats for (_, model), stats in self.stats.items() if model == model_name
-        ]
+        relevant_stats = [stats for (_, model), stats in self.stats.items() if model == model_name]
 
         if not relevant_stats:
             return {"model": model_name, "error": "no data"}
@@ -184,26 +180,30 @@ class EndpointFieldAnalyzer:
                     break
 
             if endpoints_with == all_endpoints and always_present_in_endpoints:
-                universal_required.append({
-                    "field": field_name,
-                    "endpoints": sorted(endpoints_with),
-                })
+                universal_required.append(
+                    {
+                        "field": field_name,
+                        "endpoints": sorted(endpoints_with),
+                    }
+                )
             elif not always_present_in_endpoints:
                 # Sometimes missing even within endpoints that return it
-                truly_optional.append({
-                    "field": field_name,
-                    "endpoints": sorted(endpoints_with),
-                    "presence": {
-                        ep: f"{c}/{t}" for ep, (c, t) in presence_info.items()
-                    },
-                })
+                truly_optional.append(
+                    {
+                        "field": field_name,
+                        "endpoints": sorted(endpoints_with),
+                        "presence": {ep: f"{c}/{t}" for ep, (c, t) in presence_info.items()},
+                    }
+                )
             else:
                 # Only present in some endpoints
-                endpoint_specific.append({
-                    "field": field_name,
-                    "present_in": sorted(endpoints_with),
-                    "missing_from": sorted(all_endpoints - endpoints_with),
-                })
+                endpoint_specific.append(
+                    {
+                        "field": field_name,
+                        "present_in": sorted(endpoints_with),
+                        "missing_from": sorted(all_endpoints - endpoints_with),
+                    }
+                )
 
         return {
             "model": model_name,
@@ -220,7 +220,7 @@ class EndpointFieldAnalyzer:
         print("=" * 70)
 
         # Group by model
-        models = sorted(set(model for _, model in self.stats.keys()))
+        models = sorted({model for _, model in self.stats})
 
         for model_name in models:
             print(f"\n{'=' * 70}")
@@ -229,10 +229,14 @@ class EndpointFieldAnalyzer:
 
             cross_analysis = self.get_cross_endpoint_analysis(model_name)
 
-            print(f"\nEndpoints analyzed: {', '.join(cross_analysis.get('endpoints_analyzed', []))}")
+            print(
+                f"\nEndpoints analyzed: {', '.join(cross_analysis.get('endpoints_analyzed', []))}"
+            )
 
             if cross_analysis.get("universal_required"):
-                print(f"\n  UNIVERSALLY REQUIRED ({len(cross_analysis['universal_required'])} fields):")
+                print(
+                    f"\n  UNIVERSALLY REQUIRED ({len(cross_analysis['universal_required'])} fields):"
+                )
                 print("  (Present in ALL observations across ALL endpoints - should be required)")
                 for info in cross_analysis["universal_required"]:
                     print(f"    ✓ {info['field']}")
@@ -256,7 +260,7 @@ class EndpointFieldAnalyzer:
 
             # Also show per-endpoint breakdown
             print("\n  Per-endpoint breakdown:")
-            relevant = [(ep, m) for (ep, m) in self.stats.keys() if m == model_name]
+            relevant = [(ep, m) for (ep, m) in self.stats if m == model_name]
             for endpoint, _ in sorted(relevant):
                 stats = self.stats[(endpoint, model_name)]
                 print(f"\n    {endpoint} ({stats.observations} observations):")
@@ -267,7 +271,9 @@ class EndpointFieldAnalyzer:
                 never = [f["field"] for f in analysis.get("never_present", [])]
 
                 if always:
-                    print(f"      Always: {', '.join(always[:5])}{'...' if len(always) > 5 else ''}")
+                    print(
+                        f"      Always: {', '.join(always[:5])}{'...' if len(always) > 5 else ''}"
+                    )
                 if sometimes:
                     print(f"      Sometimes: {', '.join(sometimes)}")
                 if never:
