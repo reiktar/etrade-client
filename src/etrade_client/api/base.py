@@ -122,7 +122,7 @@ class BaseAPI:
             )
         else:
             # Fallback: create per-request client (no pooling)
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.request(
                     method,
                     url,

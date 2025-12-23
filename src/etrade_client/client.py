@@ -32,7 +32,7 @@ class ETradeClient:
             await client.close()
 
     Usage (external HTTP client - shared across integrations):
-        http_client = httpx.AsyncClient(timeout=30.0)
+        http_client = httpx.AsyncClient(timeout=120.0)
         client = ETradeClient(config, http_client=http_client)
         # Client uses shared pool, doesn't close it
 
@@ -87,7 +87,7 @@ class ETradeClient:
         Only needed if not using context manager or external http_client.
         """
         if self._http_client is None and self._owns_http_client:
-            http_client = httpx.AsyncClient(timeout=30.0)
+            http_client = httpx.AsyncClient(timeout=120.0)
             self._set_http_client(http_client)
 
     async def close(self) -> None:
