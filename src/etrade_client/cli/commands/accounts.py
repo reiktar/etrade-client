@@ -447,12 +447,18 @@ async def list_dividends(
                 # Build individual row (for non-grouped output)
                 reinvested_amt = div_amount if is_drip else Decimal("0")
                 cash_amt = Decimal("0") if is_drip else div_amount
+                # Format DRIP boolean based on output format
+                if output == OutputFormat.CSV:
+                    drip_val = "true" if is_drip else "false"
+                else:
+                    drip_val = "Yes" if is_drip else ""
                 row = {
                     "date": date_str,
                     "symbol": tx_symbol,
                     "amount": f"${div_amount:,.2f}",
                     "reinvested": f"${reinvested_amt:,.2f}",
                     "cash": f"${cash_amt:,.2f}",
+                    "drip": drip_val,
                     "shares": "",
                     "price": "",
                 }
