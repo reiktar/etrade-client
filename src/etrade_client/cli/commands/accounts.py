@@ -445,11 +445,14 @@ async def list_dividends(
                         group_totals[group_key]["cash"] += div_amount
 
                 # Build individual row (for non-grouped output)
+                reinvested_amt = div_amount if is_drip else Decimal("0")
+                cash_amt = Decimal("0") if is_drip else div_amount
                 row = {
                     "date": date_str,
                     "symbol": tx_symbol,
                     "amount": f"${div_amount:,.2f}",
-                    "drip": "Yes" if is_drip else "",
+                    "reinvested": f"${reinvested_amt:,.2f}",
+                    "cash": f"${cash_amt:,.2f}",
                     "shares": "",
                     "price": "",
                 }
