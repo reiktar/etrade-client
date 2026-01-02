@@ -402,7 +402,7 @@ async def list_dividends(
                     if best_diff <= threshold:
                         is_drip = True
                         used_reinvestments.add(best_match.transaction_id)
-                        total_reinvested += div_amount
+                        total_reinvested += abs(best_match.amount)
                         match_method = "exact" if best_diff == 0 else "threshold"
 
                 # Debug output: show transaction fields for correlation analysis
@@ -426,6 +426,15 @@ async def list_dividends(
                     else:
                         print("  NO MATCH (no reinvestment candidates)")
 
+                # Calculate actual reinvested vs cash amounts
+                # Use actual reinvestment amount (may differ slightly from dividend)
+                if is_drip and best_match:
+                    reinvested_amt = abs(best_match.amount)
+                    cash_amt = div_amount - reinvested_amt
+                else:
+                    reinvested_amt = Decimal("0")
+                    cash_amt = div_amount
+
                 # Update group totals
                 if by_symbol and by_month:
                     group_key = (year_month, tx_symbol)
@@ -439,14 +448,10 @@ async def list_dividends(
                 if group_key is not None:
                     group_totals[group_key]["amount"] += div_amount
                     group_totals[group_key]["count"] += 1
-                    if is_drip:
-                        group_totals[group_key]["reinvested"] += div_amount
-                    else:
-                        group_totals[group_key]["cash"] += div_amount
+                    group_totals[group_key]["reinvested"] += reinvested_amt
+                    group_totals[group_key]["cash"] += cash_amt
 
                 # Build individual row (for non-grouped output)
-                reinvested_amt = div_amount if is_drip else Decimal("0")
-                cash_amt = Decimal("0") if is_drip else div_amount
                 # Format DRIP boolean based on output format
                 if output == OutputFormat.CSV:
                     drip_val = "true" if is_drip else "false"
