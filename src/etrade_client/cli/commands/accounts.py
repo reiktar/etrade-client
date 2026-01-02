@@ -134,7 +134,6 @@ async def get_portfolio(
             raise typer.Exit(1)
 
         portfolio = await client.accounts.get_portfolio(account_id, view=view.upper())
-
         if not portfolio.positions:
             format_output([], output, title="Portfolio Positions")
             return
@@ -143,19 +142,42 @@ async def get_portfolio(
         positions_data = [
             {
                 "symbol": pos.product.symbol if pos.product else "",
-                "type": pos.product.security_type if pos.product else "",
-                "quantity": pos.quantity or 0,
+                "qty": pos.quantity or 0,
                 "price": f"${pos.quick.last_trade:,.2f}"
                 if pos.quick and pos.quick.last_trade
                 else "N/A",
                 "value": f"${pos.market_value:,.2f}" if pos.market_value else "N/A",
-                "day_change": f"{pos.quick.change_pct:+.2f}%"
-                if pos.quick and pos.quick.change_pct
-                else "N/A",
-                "total_gain": f"${pos.total_gain:,.2f}" if pos.total_gain else "N/A",
+                "cost_basis": f"${pos.total_cost:,.2f}" if pos.total_cost else "N/A",
+                "cost/share": f"${pos.cost_per_share:,.2f}" if pos.cost_per_share else "N/A",
+                "gain": f"${pos.total_gain:+,.2f}" if pos.total_gain is not None else "N/A",
+                "gain%": f"{pos.total_gain_pct:+.2f}%" if pos.total_gain_pct is not None else "N/A",
             }
             for pos in portfolio.positions
         ]
+
+        # Add summary row for TABLE output
+        if output == OutputFormat.TABLE and len(positions_data) > 1:
+            total_value = sum(pos.market_value for pos in portfolio.positions if pos.market_value)
+            total_cost = sum(pos.total_cost for pos in portfolio.positions if pos.total_cost)
+            total_gain = sum(
+                pos.total_gain for pos in portfolio.positions if pos.total_gain is not None
+            )
+            total_gain_pct = (
+                (total_value - total_cost) / total_cost * 100 if total_cost else Decimal("0")
+            )
+
+            positions_data.append(
+                {
+                    "symbol": "TOTAL",
+                    "qty": "",
+                    "price": "",
+                    "value": f"${total_value:,.2f}",
+                    "cost_basis": f"${total_cost:,.2f}",
+                    "cost/share": "",
+                    "gain": f"${total_gain:+,.2f}",
+                    "gain%": f"{total_gain_pct:+.2f}%",
+                }
+            )
 
         format_output(positions_data, output, title="Portfolio Positions")
 
