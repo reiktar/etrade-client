@@ -647,13 +647,16 @@ async def list_dividends(
         else:
             # Non-grouped output (original behavior)
             # Add summary row for table output
+            total_cash = total_dividends - total_reinvested
             if output == OutputFormat.TABLE and len(dividend_rows) > 1:
                 dividend_rows.append(
                     {
                         "date": "---",
                         "symbol": "TOTAL",
                         "amount": f"${total_dividends:,.2f}",
-                        "drip": f"(${total_reinvested:,.2f} reinvested)",
+                        "reinvested": f"${total_reinvested:,.2f}",
+                        "cash": f"${total_cash:,.2f}",
+                        "drip": "",
                         "shares": "",
                         "price": "",
                     }
