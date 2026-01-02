@@ -211,10 +211,10 @@ async def list_dividends(
         "--ytd",
         help="Year to date (Jan 1 to today).",
     ),
-    alltime: bool = typer.Option(
+    full_history: bool = typer.Option(
         False,
-        "--alltime",
-        help="All dividends (full history).",
+        "--full-history",
+        help="Full history (up to 2 years).",
     ),
     by_symbol: bool = typer.Option(
         False,
@@ -242,7 +242,7 @@ async def list_dividends(
     """List dividend transactions for an account.
 
     Without date filters, only recent dividends are returned.
-    Use --ytd, --alltime, or --from/--to together for full history.
+    Use --ytd, --full-history, or --from/--to together for extended history.
 
     Shows both cash dividends and DRIP (dividend reinvestment) transactions.
     DRIP transactions show as negative amounts with shares purchased.
@@ -257,17 +257,18 @@ async def list_dividends(
     today = date.today()
 
     # Validate mutually exclusive date options
-    date_options_count = sum([ytd, alltime, bool(from_date or to_date)])
+    date_options_count = sum([ytd, full_history, bool(from_date or to_date)])
     if date_options_count > 1:
-        print_error("Options --ytd, --alltime, and --from/--to are mutually exclusive.")
+        print_error("Options --ytd, --full-history, and --from/--to are mutually exclusive.")
         raise typer.Exit(1)
 
     # Handle convenience date options
     if ytd:
         start_date = date(today.year, 1, 1)
         end_date = today
-    elif alltime:
-        start_date = date(2010, 1, 1)
+    elif full_history:
+        # E*Trade API only supports 2 years of history
+        start_date = today.replace(year=today.year - 2)
         end_date = today
     elif from_date or to_date:
         if from_date:
