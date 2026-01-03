@@ -336,6 +336,17 @@ async def list_dividends(
                     tx_type = tx.transaction_type
                     print(f"\n[SKIPPED] No symbol: {tx_type} ${tx.amount:,.2f} on {date_str}")
                     print(f"  description: {tx.description}")
+                    print(f"  description2: {tx.description2}")
+                    if tx.brokerage:
+                        print(f"  brokerage.display_symbol: '{tx.brokerage.display_symbol}'")
+                        if tx.brokerage.product:
+                            prod = tx.brokerage.product
+                            print(f"  brokerage.product.symbol: '{prod.symbol}'")
+                            print(f"  brokerage.product.product_id: {prod.product_id}")
+                        else:
+                            print("  brokerage.product: None")
+                    else:
+                        print("  brokerage: None")
                 continue
 
             # Filter by symbol if specified
