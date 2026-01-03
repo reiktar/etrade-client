@@ -104,6 +104,7 @@ def _complete_position_data(**overrides) -> dict:
             "changePct": "1.45",
             "volume": 50000000,
             "lastTradeTime": 1705318200,
+            "quoteStatus": "REALTIME",
         },
         "dateAcquired": "2024-01-15T10:30:00",
         "symbolDescription": "Apple Inc.",
@@ -118,6 +119,7 @@ def _complete_position_data(**overrides) -> dict:
         "todayPricePaid": 0.00,
         "todayCommissions": 0.00,
         "todayFees": 0.00,
+        "adjPrevClose": 172.50,
     }
     base.update(overrides)
     return base
