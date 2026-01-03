@@ -1,6 +1,6 @@
 """Accounts commands."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import typer
@@ -327,26 +327,33 @@ async def list_dividends(
             tx_symbol = tx.symbol
             desc_upper = (tx.description or "").upper()
 
+            # Detect pending/incomplete transactions
+            # E*Trade uses Unix epoch (1970-01-01) for missing date fields
+            epoch = datetime(1970, 1, 1)
+            is_pending = tx.post_date == epoch
+            if tx.brokerage and tx.brokerage.settlement_date == epoch:
+                is_pending = True
+
+            # Skip pending transactions (incomplete data from E*Trade)
+            if is_pending:
+                if debug:
+                    tx_date = tx.transaction_date
+                    date_str = tx_date.strftime("%Y-%m-%d") if tx_date else ""
+                    tx_type = tx.transaction_type
+                    print(f"\n[SKIPPED - PENDING] {tx_type} ${tx.amount:,.2f} on {date_str}")
+                    print(f"  description: {tx.description}")
+                    print(f"  symbol: {tx_symbol or '(none)'}")
+                    print(f"  post_date: {tx.post_date.strftime('%Y-%m-%d')}")
+                continue
+
             # Skip transactions without a symbol (e.g., money market interest)
-            # These are typically not actual stock dividends
             if not tx_symbol:
                 if debug:
                     tx_date = tx.transaction_date
                     date_str = tx_date.strftime("%Y-%m-%d") if tx_date else ""
                     tx_type = tx.transaction_type
-                    print(f"\n[SKIPPED] No symbol: {tx_type} ${tx.amount:,.2f} on {date_str}")
+                    print(f"\n[SKIPPED - NO SYMBOL] {tx_type} ${tx.amount:,.2f} on {date_str}")
                     print(f"  description: {tx.description}")
-                    print(f"  description2: {tx.description2}")
-                    if tx.brokerage:
-                        print(f"  brokerage.display_symbol: '{tx.brokerage.display_symbol}'")
-                        if tx.brokerage.product:
-                            prod = tx.brokerage.product
-                            print(f"  brokerage.product.symbol: '{prod.symbol}'")
-                            print(f"  brokerage.product.product_id: {prod.product_id}")
-                        else:
-                            print("  brokerage.product: None")
-                    else:
-                        print("  brokerage: None")
                 continue
 
             # Filter by symbol if specified
