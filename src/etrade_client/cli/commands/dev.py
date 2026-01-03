@@ -1286,16 +1286,17 @@ class ModelGenerator:
         # Collect base class fields
         base_fields = self._collect_base_fields()
 
-        # Generate nested models first (Product, Brokerage)
-        lines.extend(self._generate_pydantic_nested_models(base_fields))
+        # Generate nested models (Product, BrokerageWithProduct, BrokerageWithoutProduct)
+        nested_lines, types_with_product, _ = self._generate_pydantic_nested_models()
+        lines.extend(nested_lines)
 
-        # Generate TransactionBase
+        # Generate TransactionBase (without brokerage - varies by subclass)
         lines.extend(self._generate_pydantic_base_class(base_fields))
 
         # Generate subclasses for each transaction type
         for tx_type in self.type_names:
             lines.extend(
-                self._generate_pydantic_subclass(tx_type, base_fields)
+                self._generate_pydantic_subclass(tx_type, base_fields, types_with_product)
             )
 
         # Generate discriminated union
@@ -1345,44 +1346,121 @@ class ModelGenerator:
 
         return requirements
 
-    def _generate_pydantic_nested_models(
-        self, base_fields: dict[str, dict[str, Any]]
-    ) -> list[str]:
-        """Generate nested Pydantic models (Product, Brokerage)."""
+    def _categorize_types_by_product(self) -> tuple[list[str], list[str]]:
+        """Categorize transaction types by whether they have brokerage.product.
+
+        Returns (types_with_product, types_without_product)
+        """
+        with_product: list[str] = []
+        without_product: list[str] = []
+
+        for tx_type in self.type_names:
+            type_coverage = self.within_type_coverage.get(tx_type, {})
+            product_info = type_coverage.get("brokerage.product", {})
+            product_types = product_info.get("types", {})
+
+            non_empty = product_types.get("dict", 0)
+            empty = product_types.get("dict(empty)", 0)
+
+            if non_empty > 0 and empty == 0:
+                with_product.append(tx_type)
+            else:
+                without_product.append(tx_type)
+
+        return with_product, without_product
+
+    def _get_brokerage_field_requirements(
+        self, tx_types: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Get brokerage field requirements for a subset of transaction types.
+
+        Returns field info with is_required based on coverage within those types.
+        """
+        field_stats: dict[str, dict[str, Any]] = {}
+
+        for tx_type in tx_types:
+            type_coverage = self.within_type_coverage.get(tx_type, {})
+            type_count = self.type_counts.get(tx_type, 0)
+
+            for field, info in type_coverage.items():
+                if not field.startswith("brokerage."):
+                    continue
+                # Only direct brokerage children (not brokerage.product.X)
+                rel_field = field[len("brokerage.") :]
+                if "." in rel_field:
+                    continue
+
+                if rel_field not in field_stats:
+                    field_stats[rel_field] = {
+                        "total_count": 0,
+                        "total_transactions": 0,
+                        "python_type": info.get("python_type", "Any"),
+                        "types": {},
+                    }
+
+                field_stats[rel_field]["total_count"] += info.get("count", 0)
+                field_stats[rel_field]["total_transactions"] += type_count
+
+                # Merge type counts
+                for t, c in info.get("types", {}).items():
+                    field_stats[rel_field]["types"][t] = (
+                        field_stats[rel_field]["types"].get(t, 0) + c
+                    )
+
+        # Determine if required (100% coverage within these types)
+        result: dict[str, dict[str, Any]] = {}
+        for field, stats in field_stats.items():
+            coverage = (
+                stats["total_count"] / stats["total_transactions"] * 100
+                if stats["total_transactions"] > 0
+                else 0
+            )
+            base_type = stats["python_type"].replace(" | None", "")
+            result[field] = {
+                "python_type": base_type if coverage == 100 else f"{base_type} | None",
+                "is_required": coverage == 100,
+                "coverage_pct": coverage,
+            }
+
+        return result
+
+    def _generate_pydantic_nested_models(self) -> tuple[list[str], list[str], list[str]]:
+        """Generate nested Pydantic models (Product, BrokerageWithProduct, BrokerageWithoutProduct).
+
+        Returns (lines, types_with_product, types_without_product)
+        """
         lines: list[str] = []
+
+        # Categorize transaction types
+        types_with_product, types_without_product = self._categorize_types_by_product()
 
         # Analyze if product fields are required when product is present
         product_requirements = self._analyze_nested_field_requirements(
             "brokerage.product", "brokerage.product."
         )
 
-        # Collect product fields from all types
+        # Collect product fields from types that have product
         all_product_fields: dict[str, dict[str, Any]] = {}
-        for tx_type in self.type_names:
+        for tx_type in types_with_product:
             type_coverage = self.within_type_coverage.get(tx_type, {})
             for field, info in type_coverage.items():
                 if field.startswith("brokerage.product.") and info["status"] != "absent":
                     rel_field = field.replace("brokerage.product.", "")
-                    # Only direct children, not already seen
                     if "." not in rel_field and rel_field not in all_product_fields:
                         all_product_fields[rel_field] = info
 
-        # Generate Product model if needed
+        # Generate Product model
         if all_product_fields:
             lines.append("class Product(BaseModel):")
             lines.append('    """Product information within a brokerage transaction."""')
             lines.append("")
 
-            # Separate required and optional fields
             required_fields = []
             optional_fields = []
 
             for field, info in sorted(all_product_fields.items()):
                 python_type = info.get("python_type", "Any")
-                # Remove | None from type if present (we'll add back if needed)
                 base_type = python_type.replace(" | None", "")
-
-                # Check if field is required when parent is present
                 is_required = product_requirements.get(field, False)
 
                 if is_required:
@@ -1390,67 +1468,95 @@ class ModelGenerator:
                 else:
                     optional_fields.append((field, base_type))
 
-            # Output required fields first (no default)
             for field, python_type in required_fields:
                 lines.append(f"    {field}: {python_type}")
-
-            # Output optional fields with defaults
             for field, python_type in optional_fields:
                 lines.append(f"    {field}: {python_type} | None = None")
 
             lines.append("")
             lines.append("")
 
-        # Collect brokerage fields (exclude 'product' if we have Product model)
-        brokerage_fields = self._get_nested_fields(base_fields, "brokerage")
+        # Get brokerage field requirements for each category
+        with_product_fields = self._get_brokerage_field_requirements(types_with_product)
+        without_product_fields = self._get_brokerage_field_requirements(types_without_product)
 
-        # Generate Brokerage model
-        lines.append("class Brokerage(BaseModel):")
-        lines.append('    """Brokerage-specific transaction details."""')
+        # Generate BrokerageWithProduct
+        lines.append("class BrokerageWithProduct(BaseModel):")
+        lines.append('    """Brokerage details for transactions with product info."""')
         lines.append("")
 
-        for field, info in sorted(brokerage_fields.items()):
-            # Skip raw product dict if we're using the Product model
-            if field == "product" and all_product_fields:
+        # Required fields first
+        for field, info in sorted(with_product_fields.items()):
+            if field == "product":
                 continue
+            if info["is_required"]:
+                lines.append(f"    {field}: {info['python_type']}")
 
-            python_type = info.get("python_type", "Any")
-            if info.get("is_required", True):
-                lines.append(f"    {field}: {python_type}")
-            else:
+        # Optional fields
+        for field, info in sorted(with_product_fields.items()):
+            if field == "product":
+                continue
+            if not info["is_required"]:
+                python_type = info["python_type"]
                 if "| None" not in python_type:
                     python_type = f"{python_type} | None"
                 lines.append(f"    {field}: {python_type} = None")
 
-        # Add typed product field if we have product fields
-        if all_product_fields:
-            lines.append("    product: Product | None = None")
+        # Product is required in this variant
+        lines.append("    product: Product")
+        lines.append("")
+        lines.append("")
+
+        # Generate BrokerageWithoutProduct
+        lines.append("class BrokerageWithoutProduct(BaseModel):")
+        lines.append('    """Brokerage details for transactions without product info."""')
+        lines.append("")
+
+        # Required fields first
+        for field, info in sorted(without_product_fields.items()):
+            if field == "product":
+                continue
+            if info["is_required"]:
+                lines.append(f"    {field}: {info['python_type']}")
+
+        # Optional fields
+        for field, info in sorted(without_product_fields.items()):
+            if field == "product":
+                continue
+            if not info["is_required"]:
+                python_type = info["python_type"]
+                if "| None" not in python_type:
+                    python_type = f"{python_type} | None"
+                lines.append(f"    {field}: {python_type} = None")
 
         lines.append("")
         lines.append("")
 
-        return lines
+        return lines, types_with_product, types_without_product
 
     def _generate_pydantic_base_class(
         self, base_fields: dict[str, dict[str, Any]]
     ) -> list[str]:
-        """Generate Pydantic base class."""
+        """Generate Pydantic base class (without brokerage - varies by subclass)."""
         lines: list[str] = []
 
         lines.append("class TransactionBase(BaseModel):")
-        lines.append('    """Base class for all transaction types."""')
+        lines.append('    """Base class for all transaction types.')
+        lines.append("")
+        lines.append("    Note: brokerage field is defined in subclasses with the")
+        lines.append("    appropriate type (BrokerageWithProduct or BrokerageWithoutProduct).")
+        lines.append('    """')
         lines.append("")
 
-        # Add top-level fields (exclude nested ones)
+        # Add top-level fields (exclude nested ones and brokerage)
         top_level = self._get_top_level_fields(base_fields)
 
         for field, info in sorted(top_level.items()):
-            python_type = info.get("python_type", "Any")
-
-            # Special handling for brokerage - use nested model
+            # Skip brokerage - it's defined in subclasses
             if field == "brokerage":
-                lines.append("    brokerage: Brokerage")
                 continue
+
+            python_type = info.get("python_type", "Any")
 
             # Use Field with alias for camelCase fields
             snake_field = self._to_snake_case(field)
@@ -1472,7 +1578,10 @@ class ModelGenerator:
         return lines
 
     def _generate_pydantic_subclass(
-        self, tx_type: str, base_fields: dict[str, dict[str, Any]]
+        self,
+        tx_type: str,
+        base_fields: dict[str, dict[str, Any]],
+        types_with_product: list[str],
     ) -> list[str]:
         """Generate Pydantic subclass for a transaction type."""
         lines: list[str] = []
@@ -1480,6 +1589,10 @@ class ModelGenerator:
         class_name = self._sanitize_class_name(tx_type)
         specific_fields = self._collect_type_specific_fields(tx_type, base_fields)
         top_level_specific = self._get_top_level_fields(specific_fields)
+
+        # Determine brokerage type
+        has_product = tx_type in types_with_product
+        brokerage_type = "BrokerageWithProduct" if has_product else "BrokerageWithoutProduct"
 
         lines.append(f"class {class_name}(TransactionBase):")
         lines.append(f'    """Transaction type: {tx_type}"""')
@@ -1489,6 +1602,9 @@ class ModelGenerator:
         lines.append(f'    transaction_type: Literal["{tx_type}"] = Field(')
         lines.append(f'        default="{tx_type}", alias="transactionType"')
         lines.append("    )")
+
+        # Add brokerage with appropriate type
+        lines.append(f"    brokerage: {brokerage_type}")
 
         # Add type-specific fields
         if top_level_specific:
@@ -1514,9 +1630,6 @@ class ModelGenerator:
                         )
                     else:
                         lines.append(f"    {field}: {python_type} = None")
-
-        if not top_level_specific:
-            lines.append("    pass")
 
         lines.append("")
         lines.append("")
@@ -1568,40 +1681,46 @@ class ModelGenerator:
         # Collect base class fields
         base_fields = self._collect_base_fields()
 
-        # Generate nested dataclasses
-        lines.extend(self._generate_dataclass_nested_models(base_fields))
+        # Generate nested dataclasses (Product, BrokerageWithProduct, BrokerageWithoutProduct)
+        nested_lines, types_with_product, _ = self._generate_dataclass_nested_models()
+        lines.extend(nested_lines)
 
         # Generate base dataclass
         lines.extend(self._generate_dataclass_base(base_fields))
 
-        # Generate subclasses
+        # Generate subclasses for each transaction type
         for tx_type in self.type_names:
-            lines.extend(self._generate_dataclass_subclass(tx_type, base_fields))
+            lines.extend(
+                self._generate_dataclass_subclass(tx_type, base_fields, types_with_product)
+            )
 
         # Generate union type alias
         lines.extend(self._generate_dataclass_union())
 
         return "\n".join(lines)
 
-    def _generate_dataclass_nested_models(
-        self, base_fields: dict[str, dict[str, Any]]
-    ) -> list[str]:
-        """Generate nested dataclass models."""
+    def _generate_dataclass_nested_models(self) -> tuple[list[str], list[str], list[str]]:
+        """Generate nested dataclass models (Product, BrokerageWithProduct, BrokerageWithoutProduct).
+
+        Returns (lines, types_with_product, types_without_product)
+        """
         lines: list[str] = []
+
+        # Categorize transaction types
+        types_with_product, types_without_product = self._categorize_types_by_product()
 
         # Analyze if product fields are required when product is present
         product_requirements = self._analyze_nested_field_requirements(
             "brokerage.product", "brokerage.product."
         )
 
-        # Collect product fields from all types
+        # Collect product fields from types that have product
         all_product_fields: dict[str, dict[str, Any]] = {}
-        for tx_type in self.type_names:
+        for tx_type in types_with_product:
             type_coverage = self.within_type_coverage.get(tx_type, {})
             for fld, info in type_coverage.items():
                 if fld.startswith("brokerage.product.") and info["status"] != "absent":
                     rel_field = fld.replace("brokerage.product.", "")
-                    # Only direct children, not already seen
                     if "." not in rel_field and rel_field not in all_product_fields:
                         all_product_fields[rel_field] = info
 
@@ -1612,7 +1731,6 @@ class ModelGenerator:
             lines.append('    """Product information within a brokerage transaction."""')
             lines.append("")
 
-            # Separate required and optional fields
             required_fields = []
             optional_fields = []
 
@@ -1626,79 +1744,104 @@ class ModelGenerator:
                 else:
                     optional_fields.append((fld, base_type))
 
-            # Required fields first (no default)
             for fld, python_type in required_fields:
                 lines.append(f"    {fld}: {python_type}")
-
-            # Optional fields with defaults
             for fld, python_type in optional_fields:
                 lines.append(f"    {fld}: {python_type} | None = None")
 
             lines.append("")
             lines.append("")
 
-        # Collect brokerage fields (exclude 'product' if we have Product model)
-        brokerage_fields = self._get_nested_fields(base_fields, "brokerage")
+        # Get brokerage field requirements for each category
+        with_product_fields = self._get_brokerage_field_requirements(types_with_product)
+        without_product_fields = self._get_brokerage_field_requirements(types_without_product)
 
+        # Generate BrokerageWithProduct
         lines.append("@dataclass")
-        lines.append("class Brokerage:")
-        lines.append('    """Brokerage-specific transaction details."""')
+        lines.append("class BrokerageWithProduct:")
+        lines.append('    """Brokerage details for transactions with product info."""')
         lines.append("")
 
         # Required fields first
-        for fld, info in sorted(brokerage_fields.items()):
-            # Skip raw product dict if we're using the Product model
-            if fld == "product" and all_product_fields:
+        for fld, info in sorted(with_product_fields.items()):
+            if fld == "product":
                 continue
-            if info.get("is_required", True):
-                python_type = info.get("python_type", "Any")
-                lines.append(f"    {fld}: {python_type}")
+            if info["is_required"]:
+                lines.append(f"    {fld}: {info['python_type']}")
 
-        # Optional fields with defaults
-        for fld, info in sorted(brokerage_fields.items()):
-            # Skip raw product dict if we're using the Product model
-            if fld == "product" and all_product_fields:
+        # Optional fields
+        for fld, info in sorted(with_product_fields.items()):
+            if fld == "product":
                 continue
-            if not info.get("is_required", True):
-                python_type = info.get("python_type", "Any")
+            if not info["is_required"]:
+                python_type = info["python_type"]
                 if "| None" not in python_type:
                     python_type = f"{python_type} | None"
                 lines.append(f"    {fld}: {python_type} = None")
 
-        # Add typed product field at the end (with default)
-        if all_product_fields:
-            lines.append("    product: Product | None = None")
+        # Product is required in this variant
+        lines.append("    product: Product = field(default_factory=Product)")
+        lines.append("")
+        lines.append("")
+
+        # Generate BrokerageWithoutProduct
+        lines.append("@dataclass")
+        lines.append("class BrokerageWithoutProduct:")
+        lines.append('    """Brokerage details for transactions without product info."""')
+        lines.append("")
+
+        # Required fields first
+        for fld, info in sorted(without_product_fields.items()):
+            if fld == "product":
+                continue
+            if info["is_required"]:
+                lines.append(f"    {fld}: {info['python_type']}")
+
+        # Optional fields
+        for fld, info in sorted(without_product_fields.items()):
+            if fld == "product":
+                continue
+            if not info["is_required"]:
+                python_type = info["python_type"]
+                if "| None" not in python_type:
+                    python_type = f"{python_type} | None"
+                lines.append(f"    {fld}: {python_type} = None")
 
         lines.append("")
         lines.append("")
 
-        return lines
+        return lines, types_with_product, types_without_product
 
     def _generate_dataclass_base(
         self, base_fields: dict[str, dict[str, Any]]
     ) -> list[str]:
-        """Generate base dataclass."""
+        """Generate base dataclass (without brokerage - varies by subclass)."""
         lines: list[str] = []
 
         lines.append("@dataclass")
         lines.append("class TransactionBase:")
-        lines.append('    """Base class for all transaction types."""')
+        lines.append('    """Base class for all transaction types.')
+        lines.append("")
+        lines.append("    Note: brokerage field is defined in subclasses with the")
+        lines.append("    appropriate type (BrokerageWithProduct or BrokerageWithoutProduct).")
+        lines.append('    """')
         lines.append("")
 
         top_level = self._get_top_level_fields(base_fields)
 
-        # Required fields first
+        # Required fields first (exclude brokerage - it's defined in subclasses)
         for fld, info in sorted(top_level.items()):
+            if fld == "brokerage":
+                continue
             if info.get("is_required", True):
                 python_type = info.get("python_type", "Any")
-                if fld == "brokerage":
-                    lines.append("    brokerage: Brokerage")
-                else:
-                    snake = self._to_snake_case(fld)
-                    lines.append(f"    {snake}: {python_type}")
+                snake = self._to_snake_case(fld)
+                lines.append(f"    {snake}: {python_type}")
 
         # Optional fields with defaults
         for fld, info in sorted(top_level.items()):
+            if fld == "brokerage":
+                continue
             if not info.get("is_required", True):
                 python_type = info.get("python_type", "Any")
                 if "| None" not in python_type:
@@ -1717,7 +1860,10 @@ class ModelGenerator:
         return lines
 
     def _generate_dataclass_subclass(
-        self, tx_type: str, base_fields: dict[str, dict[str, Any]]
+        self,
+        tx_type: str,
+        base_fields: dict[str, dict[str, Any]],
+        types_with_product: list[str],
     ) -> list[str]:
         """Generate dataclass subclass for a transaction type."""
         lines: list[str] = []
@@ -1725,6 +1871,10 @@ class ModelGenerator:
         class_name = self._sanitize_class_name(tx_type)
         specific_fields = self._collect_type_specific_fields(tx_type, base_fields)
         top_level_specific = self._get_top_level_fields(specific_fields)
+
+        # Determine brokerage type based on whether this type has product
+        has_product = tx_type in types_with_product
+        brokerage_type = "BrokerageWithProduct" if has_product else "BrokerageWithoutProduct"
 
         lines.append("@dataclass")
         lines.append(f"class {class_name}(TransactionBase):")
@@ -1734,7 +1884,10 @@ class ModelGenerator:
         # Discriminator field
         lines.append(f'    transaction_type: Literal["{tx_type}"] = "{tx_type}"')
 
-        # Required type-specific fields first
+        # Brokerage field with appropriate type (uses field(default=None) since base class fields come first)
+        lines.append(f"    brokerage: {brokerage_type} = field(default=None)  # type: ignore")
+
+        # Required type-specific fields
         required_fields = [
             (f, i) for f, i in sorted(top_level_specific.items()) if i.get("is_required")
         ]
@@ -1753,9 +1906,6 @@ class ModelGenerator:
                 python_type = f"{python_type} | None"
             snake = self._to_snake_case(fld)
             lines.append(f"    {snake}: {python_type} = None")
-
-        if not required_fields and not optional_fields:
-            lines.append("    pass")
 
         lines.append("")
         lines.append("")
