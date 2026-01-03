@@ -22,7 +22,11 @@ from etrade_client.models.accounts import (
 from etrade_client.models.alerts import Alert
 from etrade_client.models.market import AllQuoteDetails, OptionDetails, Quote
 from etrade_client.models.orders import Order, OrderDetail, OrderInstrument
-from etrade_client.models.transactions import Transaction, TransactionBrokerage
+from etrade_client.models.transactions import (
+    BrokerageWithoutProduct,
+    BrokerageWithProduct,
+    Transaction,
+)
 
 if TYPE_CHECKING:
     from tests.integration.field_analyzer import FieldPresenceAnalyzer
@@ -279,4 +283,9 @@ class TestNullabilityAnalysis:
                 presence_analyzer.analyze_model(tx, Transaction)
 
                 if "Brokerage" in tx:
-                    presence_analyzer.analyze_model(tx["Brokerage"], TransactionBrokerage)
+                    brokerage = tx["Brokerage"]
+                    # Use appropriate model based on whether product is present
+                    if "product" in brokerage or "Product" in brokerage:
+                        presence_analyzer.analyze_model(brokerage, BrokerageWithProduct)
+                    else:
+                        presence_analyzer.analyze_model(brokerage, BrokerageWithoutProduct)

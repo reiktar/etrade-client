@@ -1,6 +1,6 @@
 """Accounts commands."""
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 import typer
@@ -9,6 +9,10 @@ from etrade_client.cli.async_runner import async_command
 from etrade_client.cli.client_factory import get_client
 from etrade_client.cli.config import CLIConfig, OutputFormat
 from etrade_client.cli.formatters import format_output, print_error
+from etrade_client.models.transactions import (
+    BoughtTransaction,
+    DividendTransaction,
+)
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -327,30 +331,24 @@ async def list_dividends(
             tx_symbol = tx.symbol
             desc_upper = (tx.description or "").upper()
 
-            # Detect pending/incomplete transactions
-            # E*Trade uses Unix epoch (1970-01-01) for missing date fields
-            epoch = datetime(1970, 1, 1)
-            is_pending = tx.post_date == epoch
-            if tx.brokerage and tx.brokerage.settlement_date == epoch:
-                is_pending = True
-
             # Skip pending transactions (incomplete data from E*Trade)
-            if is_pending:
+            # Transaction model's is_pending property checks for epoch zero
+            if tx.is_pending:
                 if debug:
-                    tx_date = tx.transaction_date
-                    date_str = tx_date.strftime("%Y-%m-%d") if tx_date else ""
+                    tx_datetime = tx.transaction_datetime
+                    date_str = tx_datetime.strftime("%Y-%m-%d") if tx_datetime else ""
                     tx_type = tx.transaction_type
                     print(f"\n[SKIPPED - PENDING] {tx_type} ${tx.amount:,.2f} on {date_str}")
                     print(f"  description: {tx.description}")
                     print(f"  symbol: {tx_symbol or '(none)'}")
-                    print(f"  post_date: {tx.post_date.strftime('%Y-%m-%d')}")
+                    print("  post_date: (pending)")
                 continue
 
             # Skip transactions without a symbol (e.g., money market interest)
             if not tx_symbol:
                 if debug:
-                    tx_date = tx.transaction_date
-                    date_str = tx_date.strftime("%Y-%m-%d") if tx_date else ""
+                    tx_datetime = tx.transaction_datetime
+                    date_str = tx_datetime.strftime("%Y-%m-%d") if tx_datetime else ""
                     tx_type = tx.transaction_type
                     print(f"\n[SKIPPED - NO SYMBOL] {tx_type} ${tx.amount:,.2f} on {date_str}")
                     print(f"  description: {tx.description}")
@@ -360,18 +358,19 @@ async def list_dividends(
             if symbol and tx_symbol.upper() != symbol.upper():
                 continue
 
-            date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else ""
+            tx_datetime = tx.transaction_datetime
+            date_str = tx_datetime.strftime("%Y-%m-%d") if tx_datetime else ""
             key = (date_str, tx_symbol)
 
-            # Identify dividend transactions
-            if tx.transaction_type == "Dividend":
+            # Identify dividend transactions using isinstance checks
+            if isinstance(tx, DividendTransaction):
                 if tx.amount > 0:
                     # Cash dividend received
                     by_date_symbol[key]["dividends"].append(tx)
                 else:
                     # Reinvestment (negative dividend)
                     by_date_symbol[key]["reinvestments"].append(tx)
-            elif tx.transaction_type == "Bought" and "DIVIDEND REINVESTMENT" in desc_upper:
+            elif isinstance(tx, BoughtTransaction) and "DIVIDEND REINVESTMENT" in desc_upper:
                 # E*Trade sometimes categorizes DRIP as "Bought"
                 by_date_symbol[key]["reinvestments"].append(tx)
 
@@ -449,18 +448,15 @@ async def list_dividends(
                 if debug:
                     print(f"\n--- Dividend: {tx_symbol} ${div_amount:,.2f} on {date_str} ---")
                     print(f"  tx_id: {div_tx.transaction_id}")
-                    print(f"  order_no: {div_tx.brokerage.order_no if div_tx.brokerage else None}")
                     print(f"  description: {div_tx.description}")
-                    print(f"  description2: {div_tx.description2}")
-                    print(f"  inst_type: {div_tx.inst_type}")
+                    # inst_type is only on DividendTransaction
+                    inst_type = getattr(div_tx, "inst_type", None)
+                    print(f"  inst_type: {inst_type}")
                     if is_drip and best_match:
                         print(f"  MATCHED reinvestment ({match_method}, diff=${best_diff:.4f}):")
                         print(f"    reinv_tx_id: {best_match.transaction_id}")
-                        reinv_brok = best_match.brokerage
-                        print(f"    reinv_order_no: {reinv_brok.order_no if reinv_brok else None}")
                         print(f"    reinv_amount: ${abs(best_match.amount):,.2f}")
                         print(f"    reinv_description: {best_match.description}")
-                        print(f"    reinv_description2: {best_match.description2}")
                     elif best_match:
                         print(f"  NO MATCH (diff=${best_diff:.4f} > threshold=${threshold:.4f})")
                     else:
@@ -538,13 +534,19 @@ async def list_dividends(
                     dividend_rows.append(row)
 
                 # Check limit (only for non-grouped output)
-                if not (by_symbol or by_month):
-                    if limit is not None and len(dividend_rows) >= limit:
-                        break
-
-            if not (by_symbol or by_month):
-                if limit is not None and len(dividend_rows) >= limit:
+                if (
+                    not (by_symbol or by_month)
+                    and limit is not None
+                    and len(dividend_rows) >= limit
+                ):
                     break
+
+            if (
+                not (by_symbol or by_month)
+                and limit is not None
+                and len(dividend_rows) >= limit
+            ):
+                break
 
         # Output based on grouping mode
         if by_symbol or by_month:
