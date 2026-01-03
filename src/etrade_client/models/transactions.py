@@ -20,8 +20,31 @@ class TransactionType(StrEnum):
     """Known transaction type values from E*Trade API.
 
     Values are exact strings from the API (no normalization).
+
+    The types below have been observed in real API responses from sandbox
+    and production environments. Additional types may exist but are not
+    yet documented by E*Trade. See _KNOWN_TRANSACTION_TYPES for the set
+    used by the discriminated union.
+
+    Potential additional types (not yet observed, may need verification):
+    - "Adjustment" - Account balance adjustments
+    - "Assignment" - Option assignment
+    - "Check" - Check deposits/withdrawals
+    - "Contribution" - IRA/retirement contributions
+    - "Corporate Action" - Mergers, spin-offs, name changes
+    - "Distribution" - IRA/retirement distributions
+    - "Exercise" - Option exercise
+    - "Expiration" - Option expiration
+    - "Foreign Tax" - Foreign tax withholding
+    - "Journal" - Internal account transfers
+    - "Redemption" - Mutual fund redemptions
+    - "Reorganization" - Stock reorganizations
+    - "Split" - Stock splits
+    - "Wire" - Wire transfers
+    - "Withdrawal" - Cash withdrawals
     """
 
+    # Observed transaction types (with corresponding model classes)
     BILL_PAYMENT = "Bill Payment"
     BOUGHT = "Bought"
     CASH_IN_LIEU = "Cash in Lieu"
@@ -36,6 +59,23 @@ class TransactionType(StrEnum):
     SERVICE_FEE = "Service Fee"
     SOLD = "Sold"
     TRANSFER = "Transfer"
+
+    # Potential additional types - uncomment and add model class when observed:
+    # ADJUSTMENT = "Adjustment"
+    # ASSIGNMENT = "Assignment"
+    # CHECK = "Check"
+    # CONTRIBUTION = "Contribution"
+    # CORPORATE_ACTION = "Corporate Action"
+    # DISTRIBUTION = "Distribution"
+    # EXERCISE = "Exercise"
+    # EXPIRATION = "Expiration"
+    # FOREIGN_TAX = "Foreign Tax"
+    # JOURNAL = "Journal"
+    # REDEMPTION = "Redemption"
+    # REORGANIZATION = "Reorganization"
+    # SPLIT = "Split"
+    # WIRE = "Wire"
+    # WITHDRAWAL = "Withdrawal"
 
 
 class Product(BaseModel):
