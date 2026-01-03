@@ -45,7 +45,35 @@ from etrade_client.models.orders import (
     PlaceOrderResponse,
     SecurityType,
 )
-from etrade_client.models.transactions import Transaction, TransactionListResponse
+from etrade_client.models.transactions import (
+    # Response model
+    Transaction,
+    TransactionListResponse,
+    # Enum
+    TransactionType,
+    # Base classes
+    TransactionBase,
+    Product,
+    Brokerage,
+    BrokerageWithProduct,
+    BrokerageWithoutProduct,
+    # Transaction subclasses
+    BillPaymentTransaction,
+    BoughtTransaction,
+    CashInLieuTransaction,
+    DividendTransaction,
+    ExchangeDeliveredOutTransaction,
+    ExchangeReceivedInTransaction,
+    FeeTransaction,
+    FundsReceivedTransaction,
+    GenericTransaction,
+    InterestIncomeTransaction,
+    MarginInterestTransaction,
+    PosTransaction,
+    ServiceFeeTransaction,
+    SoldTransaction,
+    TransferTransaction,
+)
 
 __all__ = [
     # Auth
@@ -95,7 +123,31 @@ __all__ = [
     "OrderPreview",
     "OrderPreviewResponse",
     "PlaceOrderResponse",
-    # Transaction models
+    # Transaction enum
+    "TransactionType",
+    # Transaction base classes
+    "TransactionBase",
+    "Product",
+    "Brokerage",
+    "BrokerageWithProduct",
+    "BrokerageWithoutProduct",
+    # Transaction subclasses
+    "BillPaymentTransaction",
+    "BoughtTransaction",
+    "CashInLieuTransaction",
+    "DividendTransaction",
+    "ExchangeDeliveredOutTransaction",
+    "ExchangeReceivedInTransaction",
+    "FeeTransaction",
+    "FundsReceivedTransaction",
+    "GenericTransaction",
+    "InterestIncomeTransaction",
+    "MarginInterestTransaction",
+    "PosTransaction",
+    "ServiceFeeTransaction",
+    "SoldTransaction",
+    "TransferTransaction",
+    # Transaction union type and response
     "Transaction",
     "TransactionListResponse",
 ]

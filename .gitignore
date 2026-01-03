@@ -25,3 +25,6 @@ tokens.json
 
 # Integration test tokens (sensitive)
 tests/integration/.tokens.json
+
+# Collected API data (dev tools)
+.data/

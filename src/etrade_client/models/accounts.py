@@ -218,7 +218,7 @@ class PortfolioPosition(BaseModel):
     days_gain: Decimal = Field(alias="daysGain")
     days_gain_pct: Decimal = Field(alias="daysGainPct")
     position_type: PositionType = Field(alias="positionType")
-    quick: PositionQuick = Field(alias="Quick")
+    quick: PositionQuick | None = Field(default=None, alias="Quick")
     date_acquired: datetime = Field(alias="dateAcquired")
 
     # Additional position details - all always present
