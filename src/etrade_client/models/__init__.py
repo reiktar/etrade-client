@@ -7,9 +7,20 @@ from etrade_client.models.accounts import (
     AccountStatus,
     AccountType,
     BalanceResponse,
+    # Portfolio quote models
+    CompleteQuote,
+    FundamentalQuote,
+    PerformanceQuote,
+    QuickQuote,
+    # Portfolio position models
+    CompleteViewPosition,
+    FundamentalViewPosition,
+    PerformanceViewPosition,
     PortfolioPosition,
+    PortfolioPositionBase,
     PortfolioResponse,
     PositionType,
+    QuickViewPosition,
 )
 from etrade_client.models.alerts import (
     Alert,
@@ -22,10 +33,20 @@ from etrade_client.models.alerts import (
 )
 from etrade_client.models.auth import AccessToken, RequestToken
 from etrade_client.models.market import (
+    # Quote detail models by detail_flag
+    AllQuoteDetail,
+    AllQuoteDetails,  # Backwards compatibility alias
+    ExtendedHourQuoteDetail,
+    FundamentalQuoteDetail,
+    IntradayQuoteDetail,
+    OptionsQuoteDetail,
+    Week52QuoteDetail,
+    # Option chain models
     OptionChain,
     OptionExpireDate,
     OptionExpiryType,
     OptionType,
+    # Quote wrapper and response
     Quote,
     QuoteResponse,
     QuoteStatus,
@@ -88,6 +109,17 @@ __all__ = [
     "AccountBalance",
     "AccountListResponse",
     "BalanceResponse",
+    # Portfolio quote models
+    "QuickQuote",
+    "PerformanceQuote",
+    "FundamentalQuote",
+    "CompleteQuote",
+    # Portfolio position models
+    "PortfolioPositionBase",
+    "QuickViewPosition",
+    "PerformanceViewPosition",
+    "FundamentalViewPosition",
+    "CompleteViewPosition",
     "PortfolioPosition",
     "PortfolioResponse",
     # Alert enums
@@ -103,6 +135,14 @@ __all__ = [
     "OptionExpiryType",
     "OptionType",
     "QuoteStatus",
+    # Quote detail models by detail_flag
+    "AllQuoteDetail",
+    "AllQuoteDetails",  # Backwards compatibility alias
+    "ExtendedHourQuoteDetail",
+    "FundamentalQuoteDetail",
+    "IntradayQuoteDetail",
+    "OptionsQuoteDetail",
+    "Week52QuoteDetail",
     # Market models
     "OptionChain",
     "OptionExpireDate",

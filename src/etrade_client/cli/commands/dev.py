@@ -1,9 +1,11 @@
 """Developer tools for data collection and analysis."""
 
 import json
+from abc import ABC, abstractmethod
 from datetime import date, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import typer
 
@@ -15,11 +17,24 @@ from etrade_client.cli.formatters import print_error, print_success
 app = typer.Typer(no_args_is_help=True)
 
 
-class ManifestManager:
-    """Manages the collection manifest file."""
+class EndpointType(StrEnum):
+    """Supported endpoint types for data collection."""
 
-    def __init__(self, data_dir: Path) -> None:
+    TRANSACTIONS = "transactions"
+    ACCOUNTS = "accounts"
+    PORTFOLIO = "portfolio"
+    ORDERS = "orders"
+    QUOTES = "quotes"
+
+
+class ManifestManager:
+    """Manages the collection manifest file for any endpoint type."""
+
+    def __init__(
+        self, data_dir: Path, endpoint: EndpointType | str = EndpointType.TRANSACTIONS
+    ) -> None:
         self.data_dir = data_dir
+        self.endpoint = EndpointType(endpoint) if isinstance(endpoint, str) else endpoint
         self.manifest_path = data_dir / "manifest.json"
 
     def load(self) -> dict[str, Any]:
@@ -27,13 +42,14 @@ class ManifestManager:
         if self.manifest_path.exists():
             return json.loads(self.manifest_path.read_text())
         return {
-            "version": "1.0",
+            "version": "1.1",
+            "endpoint": self.endpoint.value,
             "created_at": datetime.now().isoformat(),
             "last_updated": datetime.now().isoformat(),
             "collections": [],
             "summary": {
                 "total_accounts": 0,
-                "total_transactions": 0,
+                "total_items": 0,
                 "total_pages": 0,
                 "environments": [],
             },
@@ -46,14 +62,32 @@ class ManifestManager:
         self.manifest_path.write_text(json.dumps(manifest, indent=2))
 
     def find_collection(
-        self, manifest: dict[str, Any], environment: str, account_id_key: str
+        self,
+        manifest: dict[str, Any],
+        environment: str,
+        account_id_key: str | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any] | None:
-        """Find existing collection for account."""
+        """Find existing collection matching criteria.
+
+        Args:
+            manifest: The manifest dict
+            environment: Environment name (sandbox/production)
+            account_id_key: Account ID (optional for some endpoints like quotes)
+            **kwargs: Additional matching criteria (e.g., view_type, status, detail_flag)
+        """
         for collection in manifest.get("collections", []):
-            if (
-                collection.get("environment") == environment
-                and collection.get("account_id_key") == account_id_key
-            ):
+            if collection.get("environment") != environment:
+                continue
+            if account_id_key and collection.get("account_id_key") != account_id_key:
+                continue
+            # Check additional criteria
+            match = True
+            for key, value in kwargs.items():
+                if collection.get(key) != value:
+                    match = False
+                    break
+            if match:
                 return collection
         return None
 
@@ -73,8 +107,10 @@ class ManifestManager:
         return ranges
 
 
-class RawTransactionCollector:
-    """Collects raw transaction API responses."""
+class BaseCollector(ABC):
+    """Abstract base class for API data collectors."""
+
+    endpoint_type: EndpointType  # Must be set by subclasses
 
     def __init__(
         self,
@@ -85,7 +121,122 @@ class RawTransactionCollector:
         self.data_dir = data_dir
         self.environment = environment
         self.verbose = verbose
-        self.manifest_manager = ManifestManager(data_dir)
+        self.manifest_manager = ManifestManager(data_dir, self.endpoint_type)
+
+    @abstractmethod
+    async def collect(self, client: Any, **kwargs: Any) -> dict[str, Any]:
+        """Collect data from the API.
+
+        Args:
+            client: The authenticated API client
+            **kwargs: Endpoint-specific parameters
+
+        Returns:
+            Collection summary dict
+        """
+        ...
+
+    def save_page(
+        self,
+        output_dir: Path,
+        page_num: int,
+        raw_response: dict[str, Any],
+        marker: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Path:
+        """Save a page of raw API response data.
+
+        Args:
+            output_dir: Directory to save the page
+            page_num: Page number
+            raw_response: The raw JSON response
+            marker: Pagination marker used for this request
+            params: Request parameters
+
+        Returns:
+            Path to the saved file
+        """
+        page_data = {
+            "_metadata": {
+                "captured_at": datetime.now().isoformat(),
+                "page_number": page_num,
+                "marker_used": marker,
+                "params": params or {},
+            },
+            **raw_response,
+        }
+        output_dir.mkdir(parents=True, exist_ok=True)
+        page_file = output_dir / f"page_{page_num:03d}.json"
+        page_file.write_text(json.dumps(page_data, indent=2, default=str))
+        return page_file
+
+    def save_summary(
+        self,
+        output_dir: Path,
+        summary: dict[str, Any],
+    ) -> Path:
+        """Save collection summary.
+
+        Args:
+            output_dir: Directory to save the summary
+            summary: Summary dict
+
+        Returns:
+            Path to the saved file
+        """
+        summary_file = output_dir / "summary.json"
+        summary_file.write_text(json.dumps(summary, indent=2))
+        return summary_file
+
+
+class TransactionCollector(BaseCollector):
+    """Collects raw transaction API responses."""
+
+    endpoint_type = EndpointType.TRANSACTIONS
+
+    def __init__(
+        self,
+        data_dir: Path,
+        environment: str,
+        verbose: bool = False,
+    ) -> None:
+        super().__init__(data_dir, environment, verbose)
+
+    async def collect(
+        self,
+        client: Any,
+        account_id_key: str | None = None,
+        account_description: str | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Collect transactions for an account.
+
+        Args:
+            client: The authenticated API client
+            account_id_key: Account ID key
+            account_description: Human-readable account description
+            start_date: Start date for transactions
+            end_date: End date for transactions
+            **kwargs: Unused, for interface compatibility
+
+        Returns:
+            Collection summary dict
+        """
+        _ = kwargs  # Interface compatibility
+        if not account_id_key:
+            raise ValueError("account_id_key is required for transaction collection")
+        if not start_date or not end_date:
+            raise ValueError("start_date and end_date are required for transaction collection")
+
+        return await self.collect_account(
+            client,
+            account_id_key,
+            account_description or "Unknown",
+            start_date,
+            end_date,
+        )
 
     async def collect_account(
         self,
@@ -106,7 +257,6 @@ class RawTransactionCollector:
             / f"account_{account_id_key}"
             / f"{start_date.isoformat()}_{end_date.isoformat()}"
         )
-        chunk_dir.mkdir(parents=True, exist_ok=True)
 
         # Collect pages
         pages_info = []
@@ -136,20 +286,8 @@ class RawTransactionCollector:
                 params=params,
             )
 
-            # Add metadata
-            page_data = {
-                "_metadata": {
-                    "captured_at": datetime.now().isoformat(),
-                    "page_number": page_num,
-                    "marker_used": marker,
-                    "params": params,
-                },
-                **raw_response,
-            }
-
-            # Save page
-            page_file = chunk_dir / f"page_{page_num:03d}.json"
-            page_file.write_text(json.dumps(page_data, indent=2, default=str))
+            # Save page using base class method
+            page_file = self.save_page(chunk_dir, page_num, raw_response, marker, params)
 
             # Extract transaction info
             tx_response = raw_response.get("TransactionListResponse", {})
@@ -183,7 +321,7 @@ class RawTransactionCollector:
             if not marker or total_transactions >= expected_total:
                 break
 
-        # Save chunk summary
+        # Save chunk summary using base class method
         summary = {
             "environment": self.environment,
             "account_id_key": account_id_key,
@@ -195,8 +333,387 @@ class RawTransactionCollector:
             "total_transactions": total_transactions,
             "total_pages": page_num,
         }
-        summary_file = chunk_dir / "summary.json"
-        summary_file.write_text(json.dumps(summary, indent=2))
+        self.save_summary(chunk_dir, summary)
+
+        return summary
+
+
+class AccountCollector(BaseCollector):
+    """Collects raw account and balance API responses."""
+
+    endpoint_type = EndpointType.ACCOUNTS
+
+    async def collect(
+        self,
+        client: Any,
+        account_id_key: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Collect account list and balances.
+
+        Args:
+            client: The authenticated API client
+            account_id_key: Optional specific account to collect (default: all accounts)
+            **kwargs: Unused, for interface compatibility
+
+        Returns:
+            Collection summary dict
+        """
+        _ = kwargs  # Interface compatibility
+        # Create output directory
+        output_dir = self.data_dir / self.environment
+
+        # Collect accounts list
+        accounts_response = await client.accounts._get("/accounts/list.json")
+        accounts_file = self.save_page(
+            output_dir, 1, accounts_response, params={"type": "accounts_list"}
+        )
+
+        # Extract account list
+        account_list_resp = accounts_response.get("AccountListResponse", {})
+        accounts = account_list_resp.get("Accounts", {}).get("Account", [])
+        if isinstance(accounts, dict):
+            accounts = [accounts]
+
+        # Filter to specific account if requested
+        if account_id_key:
+            accounts = [a for a in accounts if a.get("accountIdKey") == account_id_key]
+
+        # Collect balance for each account
+        balance_pages = []
+        for acc in accounts:
+            acc_id = acc.get("accountIdKey")
+            if not acc_id:
+                continue
+
+            try:
+                params = {"instType": "BROKERAGE", "realTimeNAV": "true"}
+                balance_response = await client.accounts._get(
+                    f"/accounts/{acc_id}/balance.json",
+                    params=params,
+                )
+
+                balance_dir = output_dir / f"account_{acc_id}"
+                balance_file = self.save_page(
+                    balance_dir,
+                    1,
+                    balance_response,
+                    params={"type": "balance", "account_id_key": acc_id},
+                )
+                balance_pages.append(
+                    {
+                        "account_id_key": acc_id,
+                        "file": str(balance_file.relative_to(self.data_dir)),
+                    }
+                )
+
+                if self.verbose:
+                    print(f"    Collected balance for {acc_id}")
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"    Failed to collect balance for {acc_id}: {e}")
+
+        # Save summary
+        summary = {
+            "environment": self.environment,
+            "collected_at": datetime.now().isoformat(),
+            "accounts_count": len(accounts),
+            "balances_collected": len(balance_pages),
+            "accounts_file": str(accounts_file.relative_to(self.data_dir)),
+            "balance_files": balance_pages,
+        }
+        self.save_summary(output_dir, summary)
+
+        return summary
+
+
+class PortfolioCollector(BaseCollector):
+    """Collects raw portfolio API responses for different view types."""
+
+    endpoint_type = EndpointType.PORTFOLIO
+
+    # Available view types
+    VIEW_TYPES: ClassVar[list[str]] = [
+        "QUICK",
+        "PERFORMANCE",
+        "FUNDAMENTAL",
+        "COMPLETE",
+        "OPTIONSWATCH",
+    ]
+
+    async def collect(
+        self,
+        client: Any,
+        account_id_key: str | None = None,
+        views: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Collect portfolio data for specified views.
+
+        Args:
+            client: The authenticated API client
+            account_id_key: Account ID key
+            views: List of view types to collect (default: all)
+            **kwargs: Unused, for interface compatibility
+
+        Returns:
+            Collection summary dict
+        """
+        _ = kwargs  # Interface compatibility
+        if not account_id_key:
+            raise ValueError("account_id_key is required for portfolio collection")
+
+        views = views or self.VIEW_TYPES
+
+        # Create output directory
+        output_dir = self.data_dir / self.environment / f"account_{account_id_key}"
+
+        collected_views = []
+        for view in views:
+            view_dir = output_dir / view.lower()
+
+            try:
+                params = {
+                    "totalsRequired": "true",
+                    "lotsRequired": "true",
+                    "view": view,
+                }
+                response = await client.accounts._get(
+                    f"/accounts/{account_id_key}/portfolio.json",
+                    params=params,
+                )
+
+                page_file = self.save_page(view_dir, 1, response, params=params)
+                collected_views.append(
+                    {
+                        "view": view,
+                        "file": str(page_file.relative_to(self.data_dir)),
+                    }
+                )
+
+                if self.verbose:
+                    print(f"    Collected {view} view")
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"    Failed to collect {view} view: {e}")
+
+        # Save summary
+        summary = {
+            "environment": self.environment,
+            "account_id_key": account_id_key,
+            "collected_at": datetime.now().isoformat(),
+            "views_collected": len(collected_views),
+            "views": collected_views,
+        }
+        self.save_summary(output_dir, summary)
+
+        return summary
+
+
+class OrderCollector(BaseCollector):
+    """Collects raw order API responses for different status filters."""
+
+    endpoint_type = EndpointType.ORDERS
+
+    # Available status filters
+    STATUS_FILTERS: ClassVar[list[str]] = ["OPEN", "EXECUTED", "CANCELLED", "EXPIRED", "REJECTED"]
+
+    async def collect(
+        self,
+        client: Any,
+        account_id_key: str | None = None,
+        statuses: list[str] | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Collect orders for specified statuses.
+
+        Args:
+            client: The authenticated API client
+            account_id_key: Account ID key
+            statuses: List of status filters to collect (default: all + unfiltered)
+            from_date: Start date filter
+            to_date: End date filter
+            **kwargs: Unused, for interface compatibility
+
+        Returns:
+            Collection summary dict
+        """
+        _ = kwargs  # Interface compatibility
+        if not account_id_key:
+            raise ValueError("account_id_key is required for order collection")
+
+        # Collect both filtered by status and unfiltered (ALL)
+        statuses = statuses or ["ALL", *self.STATUS_FILTERS]
+
+        # Create output directory
+        output_dir = self.data_dir / self.environment / f"account_{account_id_key}"
+
+        collected = []
+        for status in statuses:
+            status_dir = output_dir / status.lower()
+
+            try:
+                params: dict[str, Any] = {"count": 100}
+                if status != "ALL":
+                    params["status"] = status
+                if from_date:
+                    params["fromDate"] = from_date.strftime("%m%d%Y")
+                if to_date:
+                    params["toDate"] = to_date.strftime("%m%d%Y")
+
+                # Paginate through all orders
+                page_num = 0
+                total_orders = 0
+                marker = None
+
+                while True:
+                    page_num += 1
+                    if marker:
+                        params["marker"] = marker
+
+                    response = await client.orders._get(
+                        f"/accounts/{account_id_key}/orders.json",
+                        params=params,
+                    )
+
+                    self.save_page(status_dir, page_num, response, marker, params)
+
+                    # Extract order count
+                    orders_resp = response.get("OrdersResponse", {})
+                    order_list = orders_resp.get("Order", [])
+                    if isinstance(order_list, dict):
+                        order_list = [order_list]
+                    total_orders += len(order_list)
+
+                    # Check for more pages
+                    marker = orders_resp.get("marker")
+                    if not marker:
+                        break
+
+                collected.append(
+                    {
+                        "status": status,
+                        "pages": page_num,
+                        "order_count": total_orders,
+                    }
+                )
+
+                if self.verbose:
+                    print(f"    Collected {status}: {total_orders} orders ({page_num} pages)")
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"    Failed to collect {status}: {e}")
+
+        # Save summary
+        summary = {
+            "environment": self.environment,
+            "account_id_key": account_id_key,
+            "from_date": from_date.isoformat() if from_date else None,
+            "to_date": to_date.isoformat() if to_date else None,
+            "collected_at": datetime.now().isoformat(),
+            "statuses_collected": len(collected),
+            "statuses": collected,
+        }
+        self.save_summary(output_dir, summary)
+
+        return summary
+
+
+class QuoteCollector(BaseCollector):
+    """Collects raw quote API responses for different detail flags."""
+
+    endpoint_type = EndpointType.QUOTES
+
+    # Available detail flags
+    DETAIL_FLAGS: ClassVar[list[str]] = [
+        "ALL",
+        "FUNDAMENTAL",
+        "INTRADAY",
+        "OPTIONS",
+        "WEEK_52",
+        "MF_DETAIL",
+    ]
+
+    async def collect(
+        self,
+        client: Any,
+        symbols: list[str] | None = None,
+        detail_flags: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Collect quotes for specified symbols and detail flags.
+
+        Args:
+            client: The authenticated API client
+            symbols: List of symbols to collect quotes for
+            detail_flags: List of detail flags to collect (default: all)
+            **kwargs: Unused, for interface compatibility
+
+        Returns:
+            Collection summary dict
+        """
+        _ = kwargs  # Interface compatibility
+        if not symbols:
+            raise ValueError("symbols are required for quote collection")
+
+        detail_flags = detail_flags or self.DETAIL_FLAGS
+
+        # Create output directory
+        output_dir = self.data_dir / self.environment
+
+        collected = []
+        for detail_flag in detail_flags:
+            flag_dir = output_dir / detail_flag.lower()
+
+            try:
+                # Batch symbols (max 25 per request)
+                batch_num = 0
+                for i in range(0, len(symbols), 25):
+                    batch_num += 1
+                    batch = symbols[i : i + 25]
+                    symbols_str = ",".join(batch)
+
+                    params = {
+                        "detailFlag": detail_flag,
+                        "requireEarningsDate": "false",
+                        "skipMiniOptionsCheck": "true",
+                    }
+                    response = await client.market._get(
+                        f"/market/quote/{symbols_str}",
+                        params=params,
+                    )
+
+                    self.save_page(flag_dir, batch_num, response, params=params)
+
+                collected.append(
+                    {
+                        "detail_flag": detail_flag,
+                        "batches": batch_num,
+                        "symbols": len(symbols),
+                    }
+                )
+
+                if self.verbose:
+                    print(f"    Collected {detail_flag}: {len(symbols)} symbols")
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"    Failed to collect {detail_flag}: {e}")
+
+        # Save summary
+        summary = {
+            "environment": self.environment,
+            "symbols": symbols,
+            "collected_at": datetime.now().isoformat(),
+            "detail_flags_collected": len(collected),
+            "detail_flags": collected,
+        }
+        self.save_summary(output_dir, summary)
 
         return summary
 
@@ -206,9 +723,7 @@ def _ranges_overlap(r1: tuple[date, date], r2: tuple[date, date]) -> bool:
     return r1[0] <= r2[1] and r2[0] <= r1[1]
 
 
-def _is_range_covered(
-    target: tuple[date, date], collected: list[tuple[date, date]]
-) -> bool:
+def _is_range_covered(target: tuple[date, date], collected: list[tuple[date, date]]) -> bool:
     """Check if target range is fully covered by collected ranges."""
     if not collected:
         return False
@@ -297,9 +812,7 @@ async def collect_transactions(
         parsed_end = today
     else:
         parsed_start = (
-            date.fromisoformat(start_date)
-            if start_date
-            else today.replace(year=today.year - 2)
+            date.fromisoformat(start_date) if start_date else today.replace(year=today.year - 2)
         )
         parsed_end = date.fromisoformat(end_date) if end_date else today
 
@@ -332,7 +845,7 @@ async def collect_transactions(
             return
 
         # Initialize collector
-        collector = RawTransactionCollector(
+        collector = TransactionCollector(
             data_dir=output_dir,
             environment=environment,
             verbose=verbose,
@@ -429,9 +942,7 @@ async def collect_transactions(
             for dr in c.get("date_ranges", [])
         )
         manifest["summary"]["total_pages"] = sum(
-            dr["page_count"]
-            for c in manifest["collections"]
-            for dr in c.get("date_ranges", [])
+            dr["page_count"] for c in manifest["collections"] for dr in c.get("date_ranges", [])
         )
         manifest["summary"]["environments"] = list(
             {c["environment"] for c in manifest["collections"]}
@@ -492,6 +1003,289 @@ def show_manifest(
             )
 
 
+@app.command("collect-accounts")
+@async_command
+async def collect_accounts(
+    ctx: typer.Context,
+    account_id: str | None = typer.Argument(
+        None,
+        help="Specific account ID key to collect (default: all accounts).",
+    ),
+    output_dir: Path = typer.Option(
+        Path(".data/accounts"),
+        "--output-dir",
+        "-o",
+        help="Output directory for collected data.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed progress.",
+    ),
+) -> None:
+    """Collect raw account and balance API responses.
+
+    Saves raw JSON responses for field discovery and type analysis.
+
+    Examples:
+        # Collect all accounts
+        etrade-cli dev collect-accounts
+
+        # Collect specific account
+        etrade-cli dev collect-accounts ABC123
+    """
+    config: CLIConfig = ctx.obj
+    environment = "sandbox" if config.sandbox else "production"
+
+    async with get_client(config) as client:
+        if not client.is_authenticated:
+            print_error("Not authenticated. Run 'etrade-cli auth login' first.")
+            raise typer.Exit(1)
+
+        collector = AccountCollector(
+            data_dir=output_dir,
+            environment=environment,
+            verbose=verbose,
+        )
+
+        print(f"\nCollecting accounts from {environment} environment...\n")
+
+        summary = await collector.collect(client, account_id_key=account_id)
+
+        print("\nCollection complete!")
+        print(f"  Accounts: {summary['accounts_count']}")
+        print(f"  Balances collected: {summary['balances_collected']}")
+        print(f"  Output: {output_dir}")
+
+        print_success("Data collected successfully")
+
+
+@app.command("collect-portfolio")
+@async_command
+async def collect_portfolio(
+    ctx: typer.Context,
+    account_id: str = typer.Argument(
+        ...,
+        help="Account ID key to collect portfolio for.",
+    ),
+    output_dir: Path = typer.Option(
+        Path(".data/portfolio"),
+        "--output-dir",
+        "-o",
+        help="Output directory for collected data.",
+    ),
+    views: str = typer.Option(
+        "QUICK,PERFORMANCE,FUNDAMENTAL,COMPLETE",
+        "--views",
+        help="Comma-separated list of view types to collect.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed progress.",
+    ),
+) -> None:
+    """Collect raw portfolio API responses for different view types.
+
+    Saves raw JSON responses for field discovery and type analysis.
+
+    Examples:
+        # Collect all view types
+        etrade-cli dev collect-portfolio ABC123
+
+        # Collect specific views
+        etrade-cli dev collect-portfolio ABC123 --views QUICK,FUNDAMENTAL
+    """
+    config: CLIConfig = ctx.obj
+    environment = "sandbox" if config.sandbox else "production"
+
+    view_list = [v.strip().upper() for v in views.split(",")]
+
+    async with get_client(config) as client:
+        if not client.is_authenticated:
+            print_error("Not authenticated. Run 'etrade-cli auth login' first.")
+            raise typer.Exit(1)
+
+        collector = PortfolioCollector(
+            data_dir=output_dir,
+            environment=environment,
+            verbose=verbose,
+        )
+
+        print(f"\nCollecting portfolio from {environment} environment...\n")
+        print(f"Account: {account_id}")
+        print(f"Views: {', '.join(view_list)}")
+
+        summary = await collector.collect(
+            client,
+            account_id_key=account_id,
+            views=view_list,
+        )
+
+        print("\nCollection complete!")
+        print(f"  Views collected: {summary['views_collected']}")
+        print(f"  Output: {output_dir}")
+
+        print_success("Data collected successfully")
+
+
+@app.command("collect-orders")
+@async_command
+async def collect_orders(
+    ctx: typer.Context,
+    account_id: str = typer.Argument(
+        ...,
+        help="Account ID key to collect orders for.",
+    ),
+    output_dir: Path = typer.Option(
+        Path(".data/orders"),
+        "--output-dir",
+        "-o",
+        help="Output directory for collected data.",
+    ),
+    statuses: str = typer.Option(
+        "ALL,OPEN,EXECUTED,CANCELLED",
+        "--statuses",
+        help="Comma-separated list of status filters to collect.",
+    ),
+    from_date: str | None = typer.Option(
+        None,
+        "--from-date",
+        help="Start date (YYYY-MM-DD).",
+    ),
+    to_date: str | None = typer.Option(
+        None,
+        "--to-date",
+        help="End date (YYYY-MM-DD).",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed progress.",
+    ),
+) -> None:
+    """Collect raw order API responses for different status filters.
+
+    Saves raw JSON responses for field discovery and type analysis.
+
+    Examples:
+        # Collect all status types
+        etrade-cli dev collect-orders ABC123
+
+        # Collect specific statuses
+        etrade-cli dev collect-orders ABC123 --statuses OPEN,EXECUTED
+    """
+    config: CLIConfig = ctx.obj
+    environment = "sandbox" if config.sandbox else "production"
+
+    status_list = [s.strip().upper() for s in statuses.split(",")]
+    parsed_from = date.fromisoformat(from_date) if from_date else None
+    parsed_to = date.fromisoformat(to_date) if to_date else None
+
+    async with get_client(config) as client:
+        if not client.is_authenticated:
+            print_error("Not authenticated. Run 'etrade-cli auth login' first.")
+            raise typer.Exit(1)
+
+        collector = OrderCollector(
+            data_dir=output_dir,
+            environment=environment,
+            verbose=verbose,
+        )
+
+        print(f"\nCollecting orders from {environment} environment...\n")
+        print(f"Account: {account_id}")
+        print(f"Statuses: {', '.join(status_list)}")
+
+        summary = await collector.collect(
+            client,
+            account_id_key=account_id,
+            statuses=status_list,
+            from_date=parsed_from,
+            to_date=parsed_to,
+        )
+
+        print("\nCollection complete!")
+        print(f"  Statuses collected: {summary['statuses_collected']}")
+        print(f"  Output: {output_dir}")
+
+        print_success("Data collected successfully")
+
+
+@app.command("collect-quotes")
+@async_command
+async def collect_quotes(
+    ctx: typer.Context,
+    symbols: str = typer.Argument(
+        ...,
+        help="Comma-separated list of symbols to collect quotes for.",
+    ),
+    output_dir: Path = typer.Option(
+        Path(".data/quotes"),
+        "--output-dir",
+        "-o",
+        help="Output directory for collected data.",
+    ),
+    detail_flags: str = typer.Option(
+        "ALL,FUNDAMENTAL,INTRADAY,OPTIONS,WEEK_52",
+        "--detail-flags",
+        help="Comma-separated list of detail flags to collect.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed progress.",
+    ),
+) -> None:
+    """Collect raw quote API responses for different detail flags.
+
+    Saves raw JSON responses for field discovery and type analysis.
+
+    Examples:
+        # Collect quotes for symbols with all detail flags
+        etrade-cli dev collect-quotes AAPL,MSFT,GOOGL
+
+        # Collect specific detail flags
+        etrade-cli dev collect-quotes AAPL --detail-flags ALL,FUNDAMENTAL
+    """
+    config: CLIConfig = ctx.obj
+    environment = "sandbox" if config.sandbox else "production"
+
+    symbol_list = [s.strip().upper() for s in symbols.split(",")]
+    flag_list = [f.strip().upper() for f in detail_flags.split(",")]
+
+    async with get_client(config) as client:
+        if not client.is_authenticated:
+            print_error("Not authenticated. Run 'etrade-cli auth login' first.")
+            raise typer.Exit(1)
+
+        collector = QuoteCollector(
+            data_dir=output_dir,
+            environment=environment,
+            verbose=verbose,
+        )
+
+        print(f"\nCollecting quotes from {environment} environment...\n")
+        print(f"Symbols: {', '.join(symbol_list)}")
+        print(f"Detail flags: {', '.join(flag_list)}")
+
+        summary = await collector.collect(
+            client,
+            symbols=symbol_list,
+            detail_flags=flag_list,
+        )
+
+        print("\nCollection complete!")
+        print(f"  Detail flags collected: {summary['detail_flags_collected']}")
+        print(f"  Output: {output_dir}")
+
+        print_success("Data collected successfully")
+
+
 class TransactionAnalyzer:
     """Analyzes collected transaction data to discover types and field patterns."""
 
@@ -514,9 +1308,7 @@ class TransactionAnalyzer:
 
         return transactions
 
-    def analyze_types(
-        self, transactions: list[dict[str, Any]]
-    ) -> dict[str, list[dict[str, Any]]]:
+    def analyze_types(self, transactions: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
         """Group transactions by transactionType."""
         by_type: dict[str, list[dict[str, Any]]] = {}
         for tx in transactions:
@@ -588,6 +1380,229 @@ class TransactionAnalyzer:
         return always, sometimes, never
 
 
+class AccountAnalyzer:
+    """Analyzes collected account/balance data to discover types and field patterns."""
+
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = data_dir
+
+    def load_all_balances(self) -> list[dict[str, Any]]:
+        """Load all balance responses from collected data."""
+        balances: list[dict[str, Any]] = []
+
+        # Find all balance page files (in account_* subdirectories)
+        for page_file in self.data_dir.rglob("account_*/page_*.json"):
+            page_data = json.loads(page_file.read_text())
+            balance_response = page_data.get("BalanceResponse", {})
+            if balance_response:
+                balances.append(balance_response)
+
+        return balances
+
+    def analyze_types(
+        self, balances: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group balances by accountType."""
+        by_type: dict[str, list[dict[str, Any]]] = {}
+        for balance in balances:
+            acc_type = balance.get("accountType", "UNKNOWN")
+            if acc_type not in by_type:
+                by_type[acc_type] = []
+            by_type[acc_type].append(balance)
+        return by_type
+
+
+class PortfolioAnalyzer:
+    """Analyzes collected portfolio data to discover view-specific field patterns."""
+
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = data_dir
+
+    def load_all_positions(self) -> list[dict[str, Any]]:
+        """Load all positions from collected portfolio data."""
+        positions: list[dict[str, Any]] = []
+
+        # Find all portfolio page files
+        for page_file in self.data_dir.rglob("*/page_*.json"):
+            page_data = json.loads(page_file.read_text())
+            portfolio_response = page_data.get("PortfolioResponse", {})
+
+            # Extract view type from metadata
+            view_type = page_data.get("_metadata", {}).get("params", {}).get("view", "UNKNOWN")
+
+            # Get positions from AccountPortfolio
+            account_portfolios = portfolio_response.get("AccountPortfolio", [])
+            if isinstance(account_portfolios, dict):
+                account_portfolios = [account_portfolios]
+
+            for account_portfolio in account_portfolios:
+                position_list = account_portfolio.get("Position", [])
+                if isinstance(position_list, dict):
+                    position_list = [position_list]
+
+                for pos in position_list:
+                    # Add view type to each position for analysis
+                    pos["_view_type"] = view_type
+                    positions.append(pos)
+
+        return positions
+
+    def analyze_types(
+        self, positions: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group positions by view type."""
+        by_type: dict[str, list[dict[str, Any]]] = {}
+        for pos in positions:
+            view_type = pos.get("_view_type", "UNKNOWN")
+            if view_type not in by_type:
+                by_type[view_type] = []
+            by_type[view_type].append(pos)
+        return by_type
+
+
+class OrderAnalyzer:
+    """Analyzes collected order data to discover status-specific field patterns."""
+
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = data_dir
+
+    def load_all_order_details(self) -> list[dict[str, Any]]:
+        """Load all order details from collected order data.
+
+        Returns OrderDetail objects with order-level metadata attached.
+        """
+        order_details: list[dict[str, Any]] = []
+
+        # Find all order page files
+        for page_file in self.data_dir.rglob("*/page_*.json"):
+            page_data = json.loads(page_file.read_text())
+            orders_response = page_data.get("OrdersResponse", {})
+
+            # Get orders list
+            order_list = orders_response.get("Order", [])
+            if isinstance(order_list, dict):
+                order_list = [order_list]
+
+            for order in order_list:
+                order_id = order.get("orderId")
+                order_type = order.get("orderType", "UNKNOWN")
+
+                # OrderDetail can be a list (multi-leg orders) or single dict
+                detail_list = order.get("OrderDetail", [])
+                if isinstance(detail_list, dict):
+                    detail_list = [detail_list]
+
+                for detail in detail_list:
+                    # Attach order-level metadata for analysis
+                    detail["_order_id"] = order_id
+                    detail["_order_type"] = order_type
+                    order_details.append(detail)
+
+        return order_details
+
+    def analyze_types(
+        self, order_details: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group order details by status."""
+        by_status: dict[str, list[dict[str, Any]]] = {}
+        for detail in order_details:
+            status = detail.get("status", "UNKNOWN")
+            if status not in by_status:
+                by_status[status] = []
+            by_status[status].append(detail)
+        return by_status
+
+    def analyze_by_order_type(
+        self, order_details: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group order details by order type (EQ, OPTN, SPREADS, etc)."""
+        by_order_type: dict[str, list[dict[str, Any]]] = {}
+        for detail in order_details:
+            order_type = detail.get("_order_type", "UNKNOWN")
+            if order_type not in by_order_type:
+                by_order_type[order_type] = []
+            by_order_type[order_type].append(detail)
+        return by_order_type
+
+
+class QuoteAnalyzer:
+    """Analyzes collected quote data to discover detail-flag-specific field patterns."""
+
+    # Mapping of detail flags to their response object keys
+    DETAIL_FLAG_KEYS: ClassVar[dict[str, str]] = {
+        "ALL": "All",
+        "FUNDAMENTAL": "Fundamental",
+        "INTRADAY": "Intraday",
+        "OPTIONS": "Option",
+        "WEEK_52": "Week52",
+        "MF_DETAIL": "MutualFund",
+    }
+
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = data_dir
+
+    def load_all_quote_details(self) -> list[dict[str, Any]]:
+        """Load all quote detail objects from collected quote data.
+
+        Returns the detail objects (All, Fundamental, Intraday, etc.) with metadata attached.
+        """
+        quote_details: list[dict[str, Any]] = []
+
+        # Find all quote page files
+        for page_file in self.data_dir.rglob("*/page_*.json"):
+            page_data = json.loads(page_file.read_text())
+            quote_response = page_data.get("QuoteResponse", {})
+
+            # Extract detail flag from metadata
+            detail_flag = (
+                page_data.get("_metadata", {}).get("params", {}).get("detailFlag", "UNKNOWN")
+            )
+            object_key = self.DETAIL_FLAG_KEYS.get(detail_flag, detail_flag)
+
+            # Get quotes list
+            quote_list = quote_response.get("QuoteData", [])
+            if isinstance(quote_list, dict):
+                quote_list = [quote_list]
+
+            for quote in quote_list:
+                # Get the detail object based on the flag
+                detail_obj = quote.get(object_key, {})
+                if detail_obj:
+                    # Attach metadata for analysis
+                    detail_obj["_detail_flag"] = detail_flag
+                    detail_obj["_symbol"] = quote.get("Product", {}).get("symbol", "UNKNOWN")
+                    detail_obj["_security_type"] = quote.get("Product", {}).get(
+                        "securityType", "UNKNOWN"
+                    )
+                    quote_details.append(detail_obj)
+
+        return quote_details
+
+    def analyze_types(
+        self, quote_details: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group quote details by detail flag."""
+        by_flag: dict[str, list[dict[str, Any]]] = {}
+        for detail in quote_details:
+            flag = detail.get("_detail_flag", "UNKNOWN")
+            if flag not in by_flag:
+                by_flag[flag] = []
+            by_flag[flag].append(detail)
+        return by_flag
+
+    def analyze_by_security_type(
+        self, quote_details: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group quote details by security type (EQ, OPTN, MF, etc)."""
+        by_sec_type: dict[str, list[dict[str, Any]]] = {}
+        for detail in quote_details:
+            sec_type = detail.get("_security_type", "UNKNOWN")
+            if sec_type not in by_sec_type:
+                by_sec_type[sec_type] = []
+            by_sec_type[sec_type].append(detail)
+        return by_sec_type
+
+
 class FieldTypeAnalyzer:
     """Analyzes field types and coverage for model design decisions."""
 
@@ -621,9 +1636,7 @@ class FieldTypeAnalyzer:
         else:
             return type(value).__name__
 
-    def extract_field_types(
-        self, obj: dict[str, Any], prefix: str = ""
-    ) -> dict[str, str]:
+    def extract_field_types(self, obj: dict[str, Any], prefix: str = "") -> dict[str, str]:
         """Extract all field paths and their types from an object."""
         result: dict[str, str] = {}
         for key, value in obj.items():
@@ -825,9 +1838,7 @@ class FieldTypeAnalyzer:
                     needs_none = coverage_pct < 100.0 or nullable
 
                     # Get Python type annotation
-                    python_type = self.get_python_type_for_field(
-                        type_counts, needs_none
-                    )
+                    python_type = self.get_python_type_for_field(type_counts, needs_none)
 
                     result[tx_type][field] = {
                         "count": count,
@@ -861,9 +1872,7 @@ class FieldTypeAnalyzer:
 
         return result
 
-    def get_python_type_for_field(
-        self, type_counts: dict[str, int], needs_none: bool
-    ) -> str:
+    def get_python_type_for_field(self, type_counts: dict[str, int], needs_none: bool) -> str:
         """Generate Python type annotation for a field.
 
         Args:
@@ -1097,6 +2106,95 @@ class FieldTypeAnalyzer:
         base = " | ".join(type_strs)
         return f"{base} | None" if has_null else base
 
+    def print_field_matrix(
+        self,
+        global_analysis: dict[str, dict[str, int]],  # noqa: ARG002
+        per_type_analysis: dict[str, dict[str, dict[str, int]]],
+    ) -> None:
+        """Print a field presence matrix across all types."""
+        matrix = self.generate_field_matrix(per_type_analysis)
+
+        if not matrix:
+            print("No fields to display.")
+            return
+
+        # Determine column widths
+        field_width = max(len(r["field"]) for r in matrix) + 2
+        type_width = 12
+
+        # Header
+        header = "Field".ljust(field_width)
+        for tx_type in self.type_names:
+            # Abbreviate long type names
+            abbrev = tx_type[:10] if len(tx_type) > 10 else tx_type
+            header += abbrev.ljust(type_width)
+        header += "Coverage"
+        print(header)
+        print("-" * len(header))
+
+        # Rows
+        for row in matrix:
+            line = row["field"].ljust(field_width)
+            for tx_type in self.type_names:
+                val = row.get(tx_type, "-")
+                # Abbreviate type info
+                if val != "-":
+                    val = val[:10] if len(val) > 10 else val
+                line += val.ljust(type_width)
+            line += row["total_types"]
+            print(line)
+
+    def print_coverage_matrix(
+        self,
+        global_analysis: dict[str, dict[str, int]],
+        per_type_analysis: dict[str, dict[str, dict[str, int]]],
+    ) -> None:
+        """Print a field coverage matrix showing percentage coverage per type."""
+        # Collect all fields
+        all_fields: set[str] = set()
+        for fields in per_type_analysis.values():
+            all_fields.update(fields.keys())
+
+        if not all_fields:
+            print("No fields to display.")
+            return
+
+        # Determine column widths
+        field_width = max(len(f) for f in all_fields) + 2
+        type_width = 12
+
+        # Header
+        header = "Field".ljust(field_width)
+        for tx_type in self.type_names:
+            abbrev = tx_type[:10] if len(tx_type) > 10 else tx_type
+            header += abbrev.ljust(type_width)
+        header += "Global"
+        print(header)
+        print("-" * len(header))
+
+        # Rows
+        for field in sorted(all_fields):
+            line = field.ljust(field_width)
+            for tx_type in self.type_names:
+                type_count = len(self.by_type[tx_type])
+                if field in per_type_analysis.get(tx_type, {}):
+                    type_counts = per_type_analysis[tx_type][field]
+                    present = sum(type_counts.values())
+                    pct = (present / type_count) * 100
+                    val = "✓" if pct == 100 else f"{pct:.0f}%"
+                else:
+                    val = "-"
+                line += val.ljust(type_width)
+
+            # Global coverage
+            if field in global_analysis:
+                total = sum(global_analysis[field].values())
+                pct = (total / self.total_count) * 100
+                line += f"{pct:.0f}%"
+            else:
+                line += "-"
+            print(line)
+
 
 class ModelGenerator:
     """Generates Python model code from transaction analysis results."""
@@ -1126,9 +2224,7 @@ class ModelGenerator:
         result = "".join(c if c.isalnum() or c == "_" else "_" for c in result)
         return result
 
-    def _get_field_python_type(
-        self, field_info: dict[str, Any], for_base: bool = False
-    ) -> str:
+    def _get_field_python_type(self, field_info: dict[str, Any], for_base: bool = False) -> str:
         """Get Python type annotation for a field."""
         python_type = field_info.get("python_type", "Any")
         # For base class, we might want stricter types
@@ -1185,9 +2281,7 @@ class ModelGenerator:
 
         return base_fields
 
-    def _compute_python_type(
-        self, type_counts: dict[str, int], is_required: bool
-    ) -> str:
+    def _compute_python_type(self, type_counts: dict[str, int], is_required: bool) -> str:
         """Compute Python type from type counts."""
         types = set(type_counts.keys())
 
@@ -1295,9 +2389,7 @@ class ModelGenerator:
 
         # Generate subclasses for each transaction type
         for tx_type in self.type_names:
-            lines.extend(
-                self._generate_pydantic_subclass(tx_type, base_fields, types_with_product)
-            )
+            lines.extend(self._generate_pydantic_subclass(tx_type, base_fields, types_with_product))
 
         # Generate discriminated union
         lines.extend(self._generate_pydantic_union())
@@ -1369,9 +2461,7 @@ class ModelGenerator:
 
         return with_product, without_product
 
-    def _get_brokerage_field_requirements(
-        self, tx_types: list[str]
-    ) -> dict[str, dict[str, Any]]:
+    def _get_brokerage_field_requirements(self, tx_types: list[str]) -> dict[str, dict[str, Any]]:
         """Get brokerage field requirements for a subset of transaction types.
 
         Returns field info with is_required based on coverage within those types.
@@ -1534,9 +2624,7 @@ class ModelGenerator:
 
         return lines, types_with_product, types_without_product
 
-    def _generate_pydantic_base_class(
-        self, base_fields: dict[str, dict[str, Any]]
-    ) -> list[str]:
+    def _generate_pydantic_base_class(self, base_fields: dict[str, dict[str, Any]]) -> list[str]:
         """Generate Pydantic base class (without brokerage - varies by subclass)."""
         lines: list[str] = []
 
@@ -1561,9 +2649,7 @@ class ModelGenerator:
             # Use Field with alias for camelCase fields
             snake_field = self._to_snake_case(field)
             if snake_field != field:
-                lines.append(
-                    f'    {snake_field}: {python_type} = Field(alias="{field}")'
-                )
+                lines.append(f'    {snake_field}: {python_type} = Field(alias="{field}")')
             else:
                 lines.append(f"    {field}: {python_type}")
 
@@ -1616,9 +2702,7 @@ class ModelGenerator:
                 is_required = info.get("is_required", False)
                 if is_required:
                     if snake_field != field:
-                        lines.append(
-                            f'    {snake_field}: {python_type} = Field(alias="{field}")'
-                        )
+                        lines.append(f'    {snake_field}: {python_type} = Field(alias="{field}")')
                     else:
                         lines.append(f"    {field}: {python_type}")
                 else:
@@ -1812,9 +2896,7 @@ class ModelGenerator:
 
         return lines, types_with_product, types_without_product
 
-    def _generate_dataclass_base(
-        self, base_fields: dict[str, dict[str, Any]]
-    ) -> list[str]:
+    def _generate_dataclass_base(self, base_fields: dict[str, dict[str, Any]]) -> list[str]:
         """Generate base dataclass (without brokerage - varies by subclass)."""
         lines: list[str] = []
 
@@ -1937,10 +3019,7 @@ class ModelGenerator:
                 # - Previous char wasn't uppercase (avoid URI -> u_r_i)
                 # - OR next char is lowercase (handle XMLParser -> xml_parser)
                 if (i > 0 and not prev_was_upper) or (
-                    i > 0
-                    and prev_was_upper
-                    and i + 1 < len(name)
-                    and name[i + 1].islower()
+                    i > 0 and prev_was_upper and i + 1 < len(name) and name[i + 1].islower()
                 ):
                     result.append("_")
                 result.append(char.lower())
@@ -2105,9 +3184,7 @@ def analyze_transactions(
         if variance_in_all:
             print("\n  --- With Type Variance (needs decision) ---")
             for field, info in sorted(variance_in_all.items()):
-                types_str = ", ".join(
-                    f"{t}:{c}" for t, c in info["global_types"].items()
-                )
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
                 python_type = analyzer.get_recommended_python_type(info["global_types"])
                 print(f"  {field}: [{types_str}] -> {python_type}")
 
@@ -2121,9 +3198,7 @@ def analyze_transactions(
             print("These fields have multiple datatypes across transactions:\n")
 
             for field, info in sorted(variance.items()):
-                types_str = ", ".join(
-                    f"{t}:{c}" for t, c in info["global_types"].items()
-                )
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
                 coverage = info["coverage_pct"]
                 python_type = analyzer.get_recommended_python_type(info["global_types"])
                 print(f"  {field}")
@@ -2261,9 +3336,7 @@ def analyze_transactions(
             "global_field_types": {
                 field: {
                     "types": types,
-                    "recommended_python_type": analyzer.get_recommended_python_type(
-                        types
-                    ),
+                    "recommended_python_type": analyzer.get_recommended_python_type(types),
                 }
                 for field, types in global_analysis.items()
             },
@@ -2307,3 +3380,1157 @@ def analyze_transactions(
             print(f"GENERATED {model_format.upper()} MODELS")
             print("=" * 60)
             print(model_code)
+
+
+@app.command("analyze-accounts")
+def analyze_accounts(
+    data_dir: Path = typer.Option(
+        Path(".data/accounts"),
+        "--data-dir",
+        "-d",
+        help="Data directory containing collected account data.",
+    ),
+    show_base_class: bool = typer.Option(
+        True,
+        "--show-base-class/--no-base-class",
+        help="Show base class candidate fields (100% coverage, same type).",
+    ),
+    show_variance: bool = typer.Option(
+        True,
+        "--show-variance/--no-variance",
+        help="Show fields with datatype variance.",
+    ),
+    show_subclass: bool = typer.Option(
+        False,
+        "--show-subclass",
+        "-s",
+        help="Show subclass-specific fields (not in all types).",
+    ),
+    show_matrix: bool = typer.Option(
+        False,
+        "--show-matrix",
+        "-m",
+        help="Show field presence matrix across all types.",
+    ),
+    show_per_type: bool = typer.Option(
+        False,
+        "--show-per-type",
+        "-p",
+        help="Show per-type field breakdown (required/optional/absent).",
+    ),
+    show_coverage_matrix: bool = typer.Option(
+        False,
+        "--show-coverage-matrix",
+        "-c",
+        help="Show coverage percentage matrix (✓=100%, X%=partial).",
+    ),
+    output_json: Path | None = typer.Option(
+        None,
+        "--output-json",
+        "-o",
+        help="Save full analysis results to JSON file.",
+    ),
+) -> None:
+    """Analyze collected account data for model design.
+
+    Performs comprehensive field and datatype analysis on account balance data:
+    - Account type distribution (MARGIN, CASH, etc.)
+    - Field coverage analysis (which fields in which account types)
+    - Datatype analysis (detect type variance)
+    - Base class candidates (fields in ALL types with same datatype)
+    - Subclass-specific fields (fields in SOME types only)
+
+    Examples:
+        # Basic analysis
+        etrade-cli dev analyze-accounts
+
+        # Include field matrix across types
+        etrade-cli dev analyze-accounts --show-matrix
+
+        # Show subclass-specific fields
+        etrade-cli dev analyze-accounts --show-subclass
+
+        # Save complete analysis to JSON
+        etrade-cli dev analyze-accounts -o analysis.json
+    """
+    if not data_dir.exists():
+        print_error(f"Data directory not found: {data_dir}")
+        print("Run 'etrade-cli dev collect-accounts' first.")
+        raise typer.Exit(1)
+
+    loader = AccountAnalyzer(data_dir)
+
+    print("\nLoading account balances...")
+    balances = loader.load_all_balances()
+
+    if not balances:
+        print_error("No balance data found in collected data.")
+        print("Run 'etrade-cli dev collect-accounts' first.")
+        raise typer.Exit(1)
+
+    # Group by type
+    by_type = loader.analyze_types(balances)
+
+    print(f"Loaded {len(balances)} account balances across {len(by_type)} types\n")
+
+    # Initialize the field type analyzer (reuse from transactions)
+    analyzer = FieldTypeAnalyzer(balances, by_type)
+
+    # Run analyses
+    global_analysis = analyzer.analyze_global()
+    per_type_analysis = analyzer.analyze_per_type()
+    cross_type = analyzer.analyze_cross_type_coverage(global_analysis, per_type_analysis)
+
+    # === Account Type Distribution ===
+    print("=" * 60)
+    print("ACCOUNT TYPE DISTRIBUTION")
+    print("=" * 60)
+    type_summary: dict[str, Any] = {}
+    for acc_type, accs in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        count = len(accs)
+        pct = (count / len(balances)) * 100
+        print(f"  {acc_type}: {count} ({pct:.1f}%)")
+        type_summary[acc_type] = {"count": count, "percentage": round(pct, 2)}
+
+    # === Base Class Candidates ===
+    if show_base_class:
+        print("\n" + "=" * 60)
+        print("BASE CLASS CANDIDATES (present in ALL types, same datatype)")
+        print("=" * 60)
+        print("Fields that should go in AccountBalanceBase:\n")
+
+        base_fields = cross_type["base_class"]
+        if base_fields:
+            for field, info in sorted(base_fields.items()):
+                type_str = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {type_str} -> {python_type}")
+        else:
+            print("  (none found)")
+
+        # Also show fields in all types but with variance
+        variance_in_all = cross_type["base_class_with_variance"]
+        if variance_in_all:
+            print("\n  --- With Type Variance (needs decision) ---")
+            for field, info in sorted(variance_in_all.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: [{types_str}] -> {python_type}")
+
+    # === Type Variance ===
+    if show_variance:
+        variance = cross_type["type_variance"]
+        if variance:
+            print("\n" + "=" * 60)
+            print("FIELDS WITH DATATYPE VARIANCE")
+            print("=" * 60)
+            print("These fields have multiple datatypes across balances:\n")
+
+            for field, info in sorted(variance.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                coverage = info["coverage_pct"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}")
+                print(f"    Types: {types_str}")
+                print(f"    Coverage: {coverage}%")
+                print(f"    Recommended: {python_type}")
+
+    # === Subclass-Specific Fields ===
+    if show_subclass:
+        subclass = cross_type["subclass_specific"]
+        if subclass:
+            print("\n" + "=" * 60)
+            print("SUBCLASS-SPECIFIC FIELDS (not in all types)")
+            print("=" * 60)
+
+            for field, info in sorted(subclass.items()):
+                type_cov = info["type_coverage"]
+                types_in = ", ".join(info["types_with_field"][:5])
+                if len(info["types_with_field"]) > 5:
+                    types_in += "..."
+                dominant = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {dominant} ({type_cov} types)")
+                print(f"    Present in: {types_in}")
+                print(f"    Recommended: {python_type}")
+
+    # === Field Matrix ===
+    if show_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD PRESENCE MATRIX")
+        print("=" * 60)
+        analyzer.print_field_matrix(global_analysis, per_type_analysis)
+
+    # === Coverage Matrix ===
+    if show_coverage_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD COVERAGE MATRIX (✓=100%, X%=partial)")
+        print("=" * 60)
+        analyzer.print_coverage_matrix(global_analysis, per_type_analysis)
+
+    # === Per-Type Breakdown ===
+    if show_per_type:
+        print("\n" + "=" * 60)
+        print("PER-TYPE FIELD ANALYSIS")
+        print("=" * 60)
+
+        for acc_type in sorted(by_type.keys()):
+            type_count = len(by_type[acc_type])
+            print(f"\n--- {acc_type} ({type_count} accounts) ---")
+
+            if acc_type in per_type_analysis:
+                type_fields = per_type_analysis[acc_type]
+
+                # Categorize fields
+                required = []
+                optional = []
+                for field, type_counts in sorted(type_fields.items()):
+                    total_present = sum(type_counts.values())
+                    if total_present == type_count:
+                        required.append(field)
+                    elif total_present > 0:
+                        optional.append(f"{field} ({total_present}/{type_count})")
+
+                if required:
+                    print(f"  Required ({len(required)}):")
+                    for f in required[:10]:
+                        print(f"    {f}")
+                    if len(required) > 10:
+                        print(f"    ... and {len(required) - 10} more")
+
+                if optional:
+                    print(f"  Optional ({len(optional)}):")
+                    for f in optional[:10]:
+                        print(f"    {f}")
+                    if len(optional) > 10:
+                        print(f"    ... and {len(optional) - 10} more")
+
+    # === JSON Output ===
+    if output_json:
+        analysis_output = {
+            "summary": {
+                "total_balances": len(balances),
+                "account_types": len(by_type),
+                "type_distribution": type_summary,
+            },
+            "cross_type_analysis": {
+                "base_class_candidates": {
+                    field: {
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class"].items()
+                },
+                "base_class_with_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class_with_variance"].items()
+                },
+                "subclass_specific": {
+                    field: {
+                        "type_coverage": info["type_coverage"],
+                        "types_with_field": info["types_with_field"],
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["subclass_specific"].items()
+                },
+                "type_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "coverage_pct": info["coverage_pct"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["type_variance"].items()
+                },
+            },
+            "per_type_analysis": per_type_analysis,
+            "global_analysis": global_analysis,
+        }
+
+        output_json.write_text(json.dumps(analysis_output, indent=2))
+        print_success(f"\nAnalysis saved to {output_json}")
+
+
+@app.command("analyze-portfolio")
+def analyze_portfolio(
+    data_dir: Path = typer.Option(
+        Path(".data/portfolio"),
+        "--data-dir",
+        "-d",
+        help="Data directory containing collected portfolio data.",
+    ),
+    show_base_class: bool = typer.Option(
+        True,
+        "--show-base-class/--no-base-class",
+        help="Show base class candidate fields (100% coverage, same type).",
+    ),
+    show_variance: bool = typer.Option(
+        True,
+        "--show-variance/--no-variance",
+        help="Show fields with datatype variance.",
+    ),
+    show_subclass: bool = typer.Option(
+        False,
+        "--show-subclass",
+        "-s",
+        help="Show subclass-specific fields (not in all types).",
+    ),
+    show_matrix: bool = typer.Option(
+        False,
+        "--show-matrix",
+        "-m",
+        help="Show field presence matrix across all view types.",
+    ),
+    show_per_type: bool = typer.Option(
+        False,
+        "--show-per-type",
+        "-p",
+        help="Show per-view-type field breakdown.",
+    ),
+    show_coverage_matrix: bool = typer.Option(
+        False,
+        "--show-coverage-matrix",
+        "-c",
+        help="Show coverage percentage matrix (✓=100%, X%=partial).",
+    ),
+    output_json: Path | None = typer.Option(
+        None,
+        "--output-json",
+        "-o",
+        help="Save full analysis results to JSON file.",
+    ),
+) -> None:
+    """Analyze collected portfolio data for model design.
+
+    Performs comprehensive field and datatype analysis on portfolio positions:
+    - View type distribution (QUICK, PERFORMANCE, FUNDAMENTAL, COMPLETE)
+    - Field coverage analysis (which fields in which view types)
+    - Datatype analysis (detect type variance)
+    - Base class candidates (fields in ALL view types with same datatype)
+    - Subclass-specific fields (view-specific quote data)
+
+    Examples:
+        # Basic analysis
+        etrade-cli dev analyze-portfolio
+
+        # Show view-specific fields (discriminated union candidates)
+        etrade-cli dev analyze-portfolio --show-subclass
+
+        # Include field matrix across types
+        etrade-cli dev analyze-portfolio --show-matrix
+
+        # Save complete analysis to JSON
+        etrade-cli dev analyze-portfolio -o analysis.json
+    """
+    if not data_dir.exists():
+        print_error(f"Data directory not found: {data_dir}")
+        print("Run 'etrade-cli dev collect-portfolio' first.")
+        raise typer.Exit(1)
+
+    loader = PortfolioAnalyzer(data_dir)
+
+    print("\nLoading portfolio positions...")
+    positions = loader.load_all_positions()
+
+    if not positions:
+        print_error("No position data found in collected data.")
+        print("Run 'etrade-cli dev collect-portfolio' first.")
+        raise typer.Exit(1)
+
+    # Group by view type
+    by_type = loader.analyze_types(positions)
+
+    print(f"Loaded {len(positions)} positions across {len(by_type)} view types\n")
+
+    # Initialize the field type analyzer
+    analyzer = FieldTypeAnalyzer(positions, by_type)
+
+    # Run analyses
+    global_analysis = analyzer.analyze_global()
+    per_type_analysis = analyzer.analyze_per_type()
+    cross_type = analyzer.analyze_cross_type_coverage(global_analysis, per_type_analysis)
+
+    # === View Type Distribution ===
+    print("=" * 60)
+    print("VIEW TYPE DISTRIBUTION")
+    print("=" * 60)
+    type_summary: dict[str, Any] = {}
+    for view_type, pos_list in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        count = len(pos_list)
+        pct = (count / len(positions)) * 100
+        print(f"  {view_type}: {count} ({pct:.1f}%)")
+        type_summary[view_type] = {"count": count, "percentage": round(pct, 2)}
+
+    # === Base Class Candidates ===
+    if show_base_class:
+        print("\n" + "=" * 60)
+        print("BASE CLASS CANDIDATES (present in ALL view types, same datatype)")
+        print("=" * 60)
+        print("Fields that should go in PortfolioPositionBase:\n")
+
+        base_fields = cross_type["base_class"]
+        if base_fields:
+            for field, info in sorted(base_fields.items()):
+                type_str = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {type_str} -> {python_type}")
+        else:
+            print("  (none found)")
+
+        # Also show fields in all types but with variance
+        variance_in_all = cross_type["base_class_with_variance"]
+        if variance_in_all:
+            print("\n  --- With Type Variance (needs decision) ---")
+            for field, info in sorted(variance_in_all.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: [{types_str}] -> {python_type}")
+
+    # === Type Variance ===
+    if show_variance:
+        variance = cross_type["type_variance"]
+        if variance:
+            print("\n" + "=" * 60)
+            print("FIELDS WITH DATATYPE VARIANCE")
+            print("=" * 60)
+            print("These fields have multiple datatypes across positions:\n")
+
+            for field, info in sorted(variance.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                coverage = info["coverage_pct"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}")
+                print(f"    Types: {types_str}")
+                print(f"    Coverage: {coverage}%")
+                print(f"    Recommended: {python_type}")
+
+    # === Subclass-Specific Fields (View-specific) ===
+    if show_subclass:
+        subclass = cross_type["subclass_specific"]
+        if subclass:
+            print("\n" + "=" * 60)
+            print("VIEW-SPECIFIC FIELDS (discriminated union candidates)")
+            print("=" * 60)
+            print("These fields only appear in certain view types:\n")
+
+            for field, info in sorted(subclass.items()):
+                type_cov = info["type_coverage"]
+                types_in = ", ".join(info["types_with_field"][:5])
+                if len(info["types_with_field"]) > 5:
+                    types_in += "..."
+                dominant = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {dominant} ({type_cov} view types)")
+                print(f"    Present in: {types_in}")
+                print(f"    Recommended: {python_type}")
+
+    # === Field Matrix ===
+    if show_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD PRESENCE MATRIX")
+        print("=" * 60)
+        analyzer.print_field_matrix(global_analysis, per_type_analysis)
+
+    # === Coverage Matrix ===
+    if show_coverage_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD COVERAGE MATRIX (✓=100%, X%=partial)")
+        print("=" * 60)
+        analyzer.print_coverage_matrix(global_analysis, per_type_analysis)
+
+    # === Per-Type Breakdown ===
+    if show_per_type:
+        print("\n" + "=" * 60)
+        print("PER-VIEW-TYPE FIELD ANALYSIS")
+        print("=" * 60)
+
+        for view_type in sorted(by_type.keys()):
+            type_count = len(by_type[view_type])
+            print(f"\n--- {view_type} ({type_count} positions) ---")
+
+            if view_type in per_type_analysis:
+                type_fields = per_type_analysis[view_type]
+
+                # Categorize fields
+                required = []
+                optional = []
+                for field, type_counts in sorted(type_fields.items()):
+                    total_present = sum(type_counts.values())
+                    if total_present == type_count:
+                        required.append(field)
+                    elif total_present > 0:
+                        optional.append(f"{field} ({total_present}/{type_count})")
+
+                if required:
+                    print(f"  Required ({len(required)}):")
+                    for f in required[:15]:
+                        print(f"    {f}")
+                    if len(required) > 15:
+                        print(f"    ... and {len(required) - 15} more")
+
+                if optional:
+                    print(f"  Optional ({len(optional)}):")
+                    for f in optional[:10]:
+                        print(f"    {f}")
+                    if len(optional) > 10:
+                        print(f"    ... and {len(optional) - 10} more")
+
+    # === JSON Output ===
+    if output_json:
+        analysis_output = {
+            "summary": {
+                "total_positions": len(positions),
+                "view_types": len(by_type),
+                "type_distribution": type_summary,
+            },
+            "cross_type_analysis": {
+                "base_class_candidates": {
+                    field: {
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class"].items()
+                },
+                "base_class_with_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class_with_variance"].items()
+                },
+                "subclass_specific": {
+                    field: {
+                        "type_coverage": info["type_coverage"],
+                        "types_with_field": info["types_with_field"],
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["subclass_specific"].items()
+                },
+                "type_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "coverage_pct": info["coverage_pct"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["type_variance"].items()
+                },
+            },
+            "per_type_analysis": per_type_analysis,
+            "global_analysis": global_analysis,
+        }
+
+        output_json.write_text(json.dumps(analysis_output, indent=2))
+        print_success(f"\nAnalysis saved to {output_json}")
+
+
+@app.command("analyze-orders")
+def analyze_orders(
+    data_dir: Path = typer.Option(
+        Path(".data/orders"),
+        "--data-dir",
+        "-d",
+        help="Data directory containing collected order data.",
+    ),
+    show_base_class: bool = typer.Option(
+        True,
+        "--show-base-class/--no-base-class",
+        help="Show base class candidate fields (100% coverage, same type).",
+    ),
+    show_variance: bool = typer.Option(
+        True,
+        "--show-variance/--no-variance",
+        help="Show fields with datatype variance.",
+    ),
+    show_subclass: bool = typer.Option(
+        False,
+        "--show-subclass",
+        "-s",
+        help="Show subclass-specific fields (not in all statuses).",
+    ),
+    show_matrix: bool = typer.Option(
+        False,
+        "--show-matrix",
+        "-m",
+        help="Show field presence matrix across all order statuses.",
+    ),
+    show_per_type: bool = typer.Option(
+        False,
+        "--show-per-type",
+        "-p",
+        help="Show per-status field breakdown.",
+    ),
+    show_coverage_matrix: bool = typer.Option(
+        False,
+        "--show-coverage-matrix",
+        "-c",
+        help="Show coverage percentage matrix (✓=100%, X%=partial).",
+    ),
+    group_by_order_type: bool = typer.Option(
+        False,
+        "--by-order-type",
+        help="Group by order type (EQ, OPTN, SPREADS) instead of status.",
+    ),
+    output_json: Path | None = typer.Option(
+        None,
+        "--output-json",
+        "-o",
+        help="Save full analysis results to JSON file.",
+    ),
+) -> None:
+    """Analyze collected order data for model design.
+
+    Performs comprehensive field and datatype analysis on order details:
+    - Status distribution (OPEN, EXECUTED, CANCELLED, EXPIRED, etc)
+    - Order type distribution (EQ, OPTN, SPREADS, ONE_CANCELS_ALL)
+    - Field coverage analysis (which fields in which statuses)
+    - Datatype analysis (detect type variance)
+    - Base class candidates (fields in ALL statuses with same datatype)
+    - Subclass-specific fields (status-specific fields)
+
+    Examples:
+        # Basic analysis by status
+        etrade-cli dev analyze-orders
+
+        # Show status-specific fields (discriminated union candidates)
+        etrade-cli dev analyze-orders --show-subclass
+
+        # Group by order type instead of status
+        etrade-cli dev analyze-orders --by-order-type
+
+        # Save complete analysis to JSON
+        etrade-cli dev analyze-orders -o analysis.json
+    """
+    if not data_dir.exists():
+        print_error(f"Data directory not found: {data_dir}")
+        print("Run 'etrade-cli dev collect-orders' first.")
+        raise typer.Exit(1)
+
+    loader = OrderAnalyzer(data_dir)
+
+    print("\nLoading order details...")
+    order_details = loader.load_all_order_details()
+
+    if not order_details:
+        print_error("No order data found in collected data.")
+        print("Run 'etrade-cli dev collect-orders' first.")
+        raise typer.Exit(1)
+
+    # Group by status or order type
+    if group_by_order_type:
+        by_type = loader.analyze_by_order_type(order_details)
+        type_label = "order type"
+    else:
+        by_type = loader.analyze_types(order_details)
+        type_label = "status"
+
+    print(f"Loaded {len(order_details)} order details across {len(by_type)} {type_label}s\n")
+
+    # Initialize the field type analyzer
+    analyzer = FieldTypeAnalyzer(order_details, by_type)
+
+    # Run analyses
+    global_analysis = analyzer.analyze_global()
+    per_type_analysis = analyzer.analyze_per_type()
+    cross_type = analyzer.analyze_cross_type_coverage(global_analysis, per_type_analysis)
+
+    # === Type Distribution ===
+    print("=" * 60)
+    print(f"{type_label.upper()} DISTRIBUTION")
+    print("=" * 60)
+    type_summary: dict[str, Any] = {}
+    for order_type, detail_list in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        count = len(detail_list)
+        pct = (count / len(order_details)) * 100
+        print(f"  {order_type}: {count} ({pct:.1f}%)")
+        type_summary[order_type] = {"count": count, "percentage": round(pct, 2)}
+
+    # === Base Class Candidates ===
+    if show_base_class:
+        print("\n" + "=" * 60)
+        print(f"BASE CLASS CANDIDATES (present in ALL {type_label}s, same datatype)")
+        print("=" * 60)
+        print("Fields that should go in OrderDetailBase:\n")
+
+        base_fields = cross_type["base_class"]
+        if base_fields:
+            for field, info in sorted(base_fields.items()):
+                type_str = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {type_str} -> {python_type}")
+        else:
+            print("  (none found)")
+
+        # Also show fields in all types but with variance
+        variance_in_all = cross_type["base_class_with_variance"]
+        if variance_in_all:
+            print("\n  --- With Type Variance (needs decision) ---")
+            for field, info in sorted(variance_in_all.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: [{types_str}] -> {python_type}")
+
+    # === Type Variance ===
+    if show_variance:
+        variance = cross_type["type_variance"]
+        if variance:
+            print("\n" + "=" * 60)
+            print("FIELDS WITH DATATYPE VARIANCE")
+            print("=" * 60)
+            print("These fields have multiple datatypes across order details:\n")
+
+            for field, info in sorted(variance.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                coverage = info["coverage_pct"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}")
+                print(f"    Types: {types_str}")
+                print(f"    Coverage: {coverage}%")
+                print(f"    Recommended: {python_type}")
+
+    # === Subclass-Specific Fields (Status-specific) ===
+    if show_subclass:
+        subclass = cross_type["subclass_specific"]
+        if subclass:
+            print("\n" + "=" * 60)
+            print(f"{type_label.upper()}-SPECIFIC FIELDS (discriminated union candidates)")
+            print("=" * 60)
+            print(f"These fields only appear in certain {type_label}s:\n")
+
+            for field, info in sorted(subclass.items()):
+                type_cov = info["type_coverage"]
+                types_in = ", ".join(info["types_with_field"][:5])
+                if len(info["types_with_field"]) > 5:
+                    types_in += "..."
+                dominant = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {dominant} ({type_cov} {type_label}s)")
+                print(f"    Present in: {types_in}")
+                print(f"    Recommended: {python_type}")
+
+    # === Field Matrix ===
+    if show_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD PRESENCE MATRIX")
+        print("=" * 60)
+        analyzer.print_field_matrix(global_analysis, per_type_analysis)
+
+    # === Coverage Matrix ===
+    if show_coverage_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD COVERAGE MATRIX (✓=100%, X%=partial)")
+        print("=" * 60)
+        analyzer.print_coverage_matrix(global_analysis, per_type_analysis)
+
+    # === Per-Type Breakdown ===
+    if show_per_type:
+        print("\n" + "=" * 60)
+        print(f"PER-{type_label.upper()} FIELD ANALYSIS")
+        print("=" * 60)
+
+        for order_type in sorted(by_type.keys()):
+            type_count = len(by_type[order_type])
+            print(f"\n--- {order_type} ({type_count} order details) ---")
+
+            if order_type in per_type_analysis:
+                type_fields = per_type_analysis[order_type]
+
+                # Categorize fields
+                required = []
+                optional = []
+                for field, type_counts in sorted(type_fields.items()):
+                    total_present = sum(type_counts.values())
+                    if total_present == type_count:
+                        required.append(field)
+                    elif total_present > 0:
+                        optional.append(f"{field} ({total_present}/{type_count})")
+
+                if required:
+                    print(f"  Required ({len(required)}):")
+                    for f in required[:15]:
+                        print(f"    {f}")
+                    if len(required) > 15:
+                        print(f"    ... and {len(required) - 15} more")
+
+                if optional:
+                    print(f"  Optional ({len(optional)}):")
+                    for f in optional[:10]:
+                        print(f"    {f}")
+                    if len(optional) > 10:
+                        print(f"    ... and {len(optional) - 10} more")
+
+    # === JSON Output ===
+    if output_json:
+        analysis_output = {
+            "summary": {
+                "total_order_details": len(order_details),
+                f"{type_label}s": len(by_type),
+                f"{type_label}_distribution": type_summary,
+                "grouped_by": "order_type" if group_by_order_type else "status",
+            },
+            "cross_type_analysis": {
+                "base_class_candidates": {
+                    field: {
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class"].items()
+                },
+                "base_class_with_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class_with_variance"].items()
+                },
+                "subclass_specific": {
+                    field: {
+                        "type_coverage": info["type_coverage"],
+                        "types_with_field": info["types_with_field"],
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["subclass_specific"].items()
+                },
+                "type_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "coverage_pct": info["coverage_pct"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["type_variance"].items()
+                },
+            },
+            "per_type_analysis": per_type_analysis,
+            "global_analysis": global_analysis,
+        }
+
+        output_json.write_text(json.dumps(analysis_output, indent=2))
+        print_success(f"\nAnalysis saved to {output_json}")
+
+
+@app.command("analyze-quotes")
+def analyze_quotes(
+    data_dir: Path = typer.Option(
+        Path(".data/quotes"),
+        "--data-dir",
+        "-d",
+        help="Data directory containing collected quote data.",
+    ),
+    show_base_class: bool = typer.Option(
+        True,
+        "--show-base-class/--no-base-class",
+        help="Show base class candidate fields (100% coverage, same type).",
+    ),
+    show_variance: bool = typer.Option(
+        True,
+        "--show-variance/--no-variance",
+        help="Show fields with datatype variance.",
+    ),
+    show_subclass: bool = typer.Option(
+        False,
+        "--show-subclass",
+        "-s",
+        help="Show subclass-specific fields (not in all detail flags).",
+    ),
+    show_matrix: bool = typer.Option(
+        False,
+        "--show-matrix",
+        "-m",
+        help="Show field presence matrix across all detail flags.",
+    ),
+    show_per_type: bool = typer.Option(
+        False,
+        "--show-per-type",
+        "-p",
+        help="Show per-detail-flag field breakdown.",
+    ),
+    show_coverage_matrix: bool = typer.Option(
+        False,
+        "--show-coverage-matrix",
+        "-c",
+        help="Show coverage percentage matrix (✓=100%, X%=partial).",
+    ),
+    group_by_security_type: bool = typer.Option(
+        False,
+        "--by-security-type",
+        help="Group by security type (EQ, OPTN, MF) instead of detail flag.",
+    ),
+    output_json: Path | None = typer.Option(
+        None,
+        "--output-json",
+        "-o",
+        help="Save full analysis results to JSON file.",
+    ),
+) -> None:
+    """Analyze collected quote data for model design.
+
+    Performs comprehensive field and datatype analysis on quote details:
+    - Detail flag distribution (ALL, FUNDAMENTAL, INTRADAY, OPTIONS, WEEK_52)
+    - Field coverage analysis (which fields in which detail flags)
+    - Datatype analysis (detect type variance)
+    - Base class candidates (fields in ALL detail flags with same datatype)
+    - Subclass-specific fields (detail-flag-specific fields)
+
+    Examples:
+        # Basic analysis by detail flag
+        etrade-cli dev analyze-quotes
+
+        # Show detail-flag-specific fields (discriminated union candidates)
+        etrade-cli dev analyze-quotes --show-subclass
+
+        # Group by security type instead of detail flag
+        etrade-cli dev analyze-quotes --by-security-type
+
+        # Save complete analysis to JSON
+        etrade-cli dev analyze-quotes -o analysis.json
+    """
+    if not data_dir.exists():
+        print_error(f"Data directory not found: {data_dir}")
+        print("Run 'etrade-cli dev collect-quotes' first.")
+        raise typer.Exit(1)
+
+    loader = QuoteAnalyzer(data_dir)
+
+    print("\nLoading quote details...")
+    quote_details = loader.load_all_quote_details()
+
+    if not quote_details:
+        print_error("No quote data found in collected data.")
+        print("Run 'etrade-cli dev collect-quotes' first.")
+        raise typer.Exit(1)
+
+    # Group by detail flag or security type
+    if group_by_security_type:
+        by_type = loader.analyze_by_security_type(quote_details)
+        type_label = "security type"
+    else:
+        by_type = loader.analyze_types(quote_details)
+        type_label = "detail flag"
+
+    print(f"Loaded {len(quote_details)} quote details across {len(by_type)} {type_label}s\n")
+
+    # Initialize the field type analyzer
+    analyzer = FieldTypeAnalyzer(quote_details, by_type)
+
+    # Run analyses
+    global_analysis = analyzer.analyze_global()
+    per_type_analysis = analyzer.analyze_per_type()
+    cross_type = analyzer.analyze_cross_type_coverage(global_analysis, per_type_analysis)
+
+    # === Type Distribution ===
+    print("=" * 60)
+    print(f"{type_label.upper()} DISTRIBUTION")
+    print("=" * 60)
+    type_summary: dict[str, Any] = {}
+    for quote_type, detail_list in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        count = len(detail_list)
+        pct = (count / len(quote_details)) * 100
+        print(f"  {quote_type}: {count} ({pct:.1f}%)")
+        type_summary[quote_type] = {"count": count, "percentage": round(pct, 2)}
+
+    # === Base Class Candidates ===
+    if show_base_class:
+        print("\n" + "=" * 60)
+        print(f"BASE CLASS CANDIDATES (present in ALL {type_label}s, same datatype)")
+        print("=" * 60)
+        print("Fields that should go in QuoteDetailBase:\n")
+
+        base_fields = cross_type["base_class"]
+        if base_fields:
+            for field, info in sorted(base_fields.items()):
+                type_str = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {type_str} -> {python_type}")
+        else:
+            print("  (none found)")
+
+        # Also show fields in all types but with variance
+        variance_in_all = cross_type["base_class_with_variance"]
+        if variance_in_all:
+            print("\n  --- With Type Variance (needs decision) ---")
+            for field, info in sorted(variance_in_all.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: [{types_str}] -> {python_type}")
+
+    # === Type Variance ===
+    if show_variance:
+        variance = cross_type["type_variance"]
+        if variance:
+            print("\n" + "=" * 60)
+            print("FIELDS WITH DATATYPE VARIANCE")
+            print("=" * 60)
+            print("These fields have multiple datatypes across quote details:\n")
+
+            for field, info in sorted(variance.items()):
+                types_str = ", ".join(f"{t}:{c}" for t, c in info["global_types"].items())
+                coverage = info["coverage_pct"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}")
+                print(f"    Types: {types_str}")
+                print(f"    Coverage: {coverage}%")
+                print(f"    Recommended: {python_type}")
+
+    # === Subclass-Specific Fields (Detail-flag-specific) ===
+    if show_subclass:
+        subclass = cross_type["subclass_specific"]
+        if subclass:
+            print("\n" + "=" * 60)
+            print(f"{type_label.upper()}-SPECIFIC FIELDS (discriminated union candidates)")
+            print("=" * 60)
+            print(f"These fields only appear in certain {type_label}s:\n")
+
+            for field, info in sorted(subclass.items()):
+                type_cov = info["type_coverage"]
+                types_in = ", ".join(info["types_with_field"][:5])
+                if len(info["types_with_field"]) > 5:
+                    types_in += "..."
+                dominant = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {dominant} ({type_cov} {type_label}s)")
+                print(f"    Present in: {types_in}")
+                print(f"    Recommended: {python_type}")
+
+    # === Field Matrix ===
+    if show_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD PRESENCE MATRIX")
+        print("=" * 60)
+        analyzer.print_field_matrix(global_analysis, per_type_analysis)
+
+    # === Coverage Matrix ===
+    if show_coverage_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD COVERAGE MATRIX (✓=100%, X%=partial)")
+        print("=" * 60)
+        analyzer.print_coverage_matrix(global_analysis, per_type_analysis)
+
+    # === Per-Type Breakdown ===
+    if show_per_type:
+        print("\n" + "=" * 60)
+        print(f"PER-{type_label.upper()} FIELD ANALYSIS")
+        print("=" * 60)
+
+        for quote_type in sorted(by_type.keys()):
+            type_count = len(by_type[quote_type])
+            print(f"\n--- {quote_type} ({type_count} quote details) ---")
+
+            if quote_type in per_type_analysis:
+                type_fields = per_type_analysis[quote_type]
+
+                # Categorize fields
+                required = []
+                optional = []
+                for field, type_counts in sorted(type_fields.items()):
+                    total_present = sum(type_counts.values())
+                    if total_present == type_count:
+                        required.append(field)
+                    elif total_present > 0:
+                        optional.append(f"{field} ({total_present}/{type_count})")
+
+                if required:
+                    print(f"  Required ({len(required)}):")
+                    for f in required[:20]:
+                        print(f"    {f}")
+                    if len(required) > 20:
+                        print(f"    ... and {len(required) - 20} more")
+
+                if optional:
+                    print(f"  Optional ({len(optional)}):")
+                    for f in optional[:10]:
+                        print(f"    {f}")
+                    if len(optional) > 10:
+                        print(f"    ... and {len(optional) - 10} more")
+
+    # === JSON Output ===
+    if output_json:
+        analysis_output = {
+            "summary": {
+                "total_quote_details": len(quote_details),
+                f"{type_label}s": len(by_type),
+                f"{type_label}_distribution": type_summary,
+                "grouped_by": "security_type" if group_by_security_type else "detail_flag",
+            },
+            "cross_type_analysis": {
+                "base_class_candidates": {
+                    field: {
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class"].items()
+                },
+                "base_class_with_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["base_class_with_variance"].items()
+                },
+                "subclass_specific": {
+                    field: {
+                        "type_coverage": info["type_coverage"],
+                        "types_with_field": info["types_with_field"],
+                        "dominant_type": info["dominant_type"],
+                        "global_types": info["global_types"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["subclass_specific"].items()
+                },
+                "type_variance": {
+                    field: {
+                        "global_types": info["global_types"],
+                        "coverage_pct": info["coverage_pct"],
+                        "recommended_python_type": analyzer.get_recommended_python_type(
+                            info["global_types"]
+                        ),
+                    }
+                    for field, info in cross_type["type_variance"].items()
+                },
+            },
+            "per_type_analysis": per_type_analysis,
+            "global_analysis": global_analysis,
+        }
+
+        output_json.write_text(json.dumps(analysis_output, indent=2))
+        print_success(f"\nAnalysis saved to {output_json}")

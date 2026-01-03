@@ -29,21 +29,146 @@ class OptionExpiryType(StrEnum):
     QUARTERLY = "QUARTERLY"
 
 
-class AllQuoteDetails(BaseModel):
-    """Detailed quote information."""
+# =============================================================================
+# Quote Detail Models by Detail Flag
+# =============================================================================
+# The E*Trade API returns different quote objects based on the detail_flag
+# parameter. Each detail flag returns a mutually exclusive set of fields.
+# =============================================================================
 
-    # Price data
+
+class ExtendedHourQuoteDetail(BaseModel):
+    """Extended hours quote detail (after-hours/pre-market).
+
+    Present as a nested object within AllQuoteDetail when ahFlag is 'true'
+    and extended hours data is available.
+    """
+
+    ask: Decimal = Field()
+    ask_size: int = Field(alias="askSize")
+    bid: Decimal = Field()
+    bid_size: int = Field(alias="bidSize")
+    change: Decimal = Field()
+    last_price: Decimal = Field(alias="lastPrice")
+    percent_change: Decimal = Field(alias="percentChange")
+    quote_status: str = Field(alias="quoteStatus")
+    time_of_last_trade: int = Field(alias="timeOfLastTrade")
+    time_zone: str = Field(alias="timeZone")
+    volume: int = Field()
+
+    model_config = {"populate_by_name": True}
+
+
+class FundamentalQuoteDetail(BaseModel):
+    """Quote details returned with detail_flag=FUNDAMENTAL.
+
+    Contains company fundamentals like earnings data.
+    """
+
+    company_name: str = Field(alias="companyName")
+    eps: Decimal = Field()
+    est_earnings: Decimal = Field(alias="estEarnings")
+    high_52: Decimal = Field(alias="high52")
     last_trade: Decimal = Field(alias="lastTrade")
+    low_52: Decimal = Field(alias="low52")
+    symbol_description: str = Field(alias="symbolDescription")
+
+    model_config = {"populate_by_name": True}
+
+
+class IntradayQuoteDetail(BaseModel):
+    """Quote details returned with detail_flag=INTRADAY.
+
+    Contains current trading session data.
+    """
+
+    ask: Decimal = Field()
+    bid: Decimal = Field()
+    change_close: Decimal = Field(alias="changeClose")
+    change_close_pct: Decimal = Field(alias="changeClosePercentage")
+    company_name: str = Field(alias="companyName")
+    high: Decimal = Field()
+    last_trade: Decimal = Field(alias="lastTrade")
+    low: Decimal = Field()
+    total_volume: int = Field(alias="totalVolume")
+
+    model_config = {"populate_by_name": True}
+
+
+class OptionsQuoteDetail(BaseModel):
+    """Quote details returned with detail_flag=OPTIONS.
+
+    Contains options-related quote data (not to be confused with OptionDetails
+    which represents individual option contracts in an options chain).
+    """
+
+    ask: Decimal = Field()
+    ask_size: int = Field(alias="askSize")
+    bid: Decimal = Field()
+    bid_size: int = Field(alias="bidSize")
+    company_name: str = Field(alias="companyName")
+    contract_size: Decimal = Field(alias="contractSize")
+    days_to_expiration: int = Field(alias="daysToExpiration")
+    intrinsic_value: Decimal = Field(alias="intrinsicValue")
+    last_trade: Decimal = Field(alias="lastTrade")
+    open_interest: int = Field(alias="openInterest")
+    option_multiplier: Decimal = Field(alias="optionMultiplier")
+    option_previous_ask_price: Decimal = Field(alias="optionPreviousAskPrice")
+    option_previous_bid_price: Decimal = Field(alias="optionPreviousBidPrice")
+    osi_key: str = Field(alias="osiKey")
+    symbol_description: str = Field(alias="symbolDescription")
+    time_premium: Decimal = Field(alias="timePremium")
+
+    model_config = {"populate_by_name": True}
+
+
+class Week52QuoteDetail(BaseModel):
+    """Quote details returned with detail_flag=WEEK_52.
+
+    Contains 52-week performance data.
+    """
+
+    company_name: str = Field(alias="companyName")
+    high_52: Decimal = Field(alias="high52")
+    last_trade: Decimal = Field(alias="lastTrade")
+    low_52: Decimal = Field(alias="low52")
+    perf_12_months: Decimal = Field(alias="perf12Months")
+    previous_close: Decimal = Field(alias="previousClose")
+    symbol_description: str = Field(alias="symbolDescription")
+    total_volume: int = Field(alias="totalVolume")
+
+    model_config = {"populate_by_name": True}
+
+
+class AllQuoteDetail(BaseModel):
+    """Quote details returned with detail_flag=ALL.
+
+    Contains the most comprehensive quote data including price, volume,
+    company info, dividend data, and optionally extended hours data.
+
+    Note: Most fields are optional to maintain backwards compatibility
+    and handle edge cases where the API may not return all fields.
+    Fields marked as required are those that are always present per
+    E*Trade API documentation and observed data.
+    """
+
+    # Price data - required fields (always present)
+    last_trade: Decimal = Field(alias="lastTrade")
+    previous_close: Decimal = Field(alias="previousClose")
+    open_: Decimal = Field(alias="open")
+    high: Decimal = Field()
+    low: Decimal = Field()
+    total_volume: int = Field(alias="totalVolume")
+
+    # Change from close - may not be present in some responses
     change: Decimal = Field(default=Decimal("0"))
     change_pct: Decimal = Field(default=Decimal("0"), alias="changePct")
     change_close: Decimal | None = Field(default=None, alias="changeClose")
     change_close_pct: Decimal | None = Field(default=None, alias="changeClosePercentage")
-    previous_close: Decimal = Field(alias="previousClose")
 
-    # Day range
-    high: Decimal = Field(alias="high")
-    low: Decimal = Field(alias="low")
-    open_: Decimal = Field(alias="open")
+    # Core identifiers
+    company_name: str | None = Field(default=None, alias="companyName")
+    symbol_description: str | None = Field(default=None, alias="symbolDescription")
 
     # 52-week range
     high_52: Decimal | None = Field(default=None, alias="high52")
@@ -52,7 +177,6 @@ class AllQuoteDetails(BaseModel):
     week_52_low_date: int | None = Field(default=None, alias="week52LowDate")
 
     # Volume
-    total_volume: int = Field(alias="totalVolume")
     average_volume: int | None = Field(default=None, alias="averageVolume")
     previous_day_volume: int | None = Field(default=None, alias="previousDayVolume")
 
@@ -65,9 +189,7 @@ class AllQuoteDetails(BaseModel):
     ask_time: str | None = Field(default=None, alias="askTime")
     bid_exchange: str | None = Field(default=None, alias="bidExchange")
 
-    # Company info
-    company_name: str | None = Field(default=None, alias="companyName")
-    symbol_description: str | None = Field(default=None, alias="symbolDescription")
+    # Company fundamentals
     market_cap: Decimal | None = Field(default=None, alias="marketCap")
     pe_ratio: Decimal | None = Field(default=None, alias="peRatio")
     pe: Decimal | None = Field(default=None)
@@ -89,7 +211,7 @@ class AllQuoteDetails(BaseModel):
     # Earnings
     next_earning_date: str | None = Field(default=None, alias="nextEarningDate")
 
-    # Options-related (when quoting options)
+    # Options-related fields (present even for non-option quotes)
     open_interest: int | None = Field(default=None, alias="openInterest")
     intrinsic_value: Decimal | None = Field(default=None, alias="intrinsicValue")
     time_premium: Decimal | None = Field(default=None, alias="timePremium")
@@ -98,14 +220,28 @@ class AllQuoteDetails(BaseModel):
     expiration_date: int | None = Field(default=None, alias="expirationDate")
     days_to_expiration: int | None = Field(default=None, alias="daysToExpiration")
     option_style: str | None = Field(default=None, alias="optionStyle")
+    option_underlier: str | None = Field(default=None, alias="optionUnderlier")
+    option_underlier_exchange: str | None = Field(default=None, alias="optionUnderlierExchange")
+    osi_key: str | None = Field(default=None, alias="osiKey")
+    option_previous_ask_price: Decimal | None = Field(default=None, alias="optionPreviousAskPrice")
+    option_previous_bid_price: Decimal | None = Field(default=None, alias="optionPreviousBidPrice")
     cash_deliverable: int | None = Field(default=None, alias="cashDeliverable")
 
-    # Timestamps and status
+    # Status and timing
     time_of_last_trade: int | None = Field(default=None, alias="timeOfLastTrade")
     dir_last: str | None = Field(default=None, alias="dirLast")
     adjusted_flag: bool | None = Field(default=None, alias="adjustedFlag")
 
+    # Extended hours data - optional, only present when ahFlag is 'true'
+    extended_hour_quote_detail: ExtendedHourQuoteDetail | None = Field(
+        default=None, alias="ExtendedHourQuoteDetail"
+    )
+
     model_config = {"populate_by_name": True}
+
+
+# Backwards compatibility alias
+AllQuoteDetails = AllQuoteDetail
 
 
 class QuoteProduct(BaseModel):
@@ -120,7 +256,16 @@ class QuoteProduct(BaseModel):
 
 
 class Quote(BaseModel):
-    """Stock quote with all available data."""
+    """Stock quote with all available data.
+
+    The detail fields are mutually exclusive based on the detail_flag parameter
+    used when fetching quotes:
+    - ALL: all_ field populated
+    - FUNDAMENTAL: fundamental field populated
+    - INTRADAY: intraday field populated
+    - OPTIONS: option field populated
+    - WEEK_52: week_52 field populated
+    """
 
     # symbol is extracted from Product during parsing
     symbol: str
@@ -130,25 +275,93 @@ class Quote(BaseModel):
     date_time_utc: int = Field(alias="dateTimeUTC")
     ah_flag: str = Field(alias="ahFlag")
     product: QuoteProduct = Field(alias="Product")
-    # May not be present depending on detail level requested
-    all_data: AllQuoteDetails | None = Field(default=None, alias="All")
 
-    # Flattened common fields for convenience
+    # Detail type objects - only one will be present based on detail_flag
+    all_: AllQuoteDetail | None = Field(default=None, alias="All")
+    fundamental: FundamentalQuoteDetail | None = Field(default=None, alias="Fundamental")
+    intraday: IntradayQuoteDetail | None = Field(default=None, alias="Intraday")
+    option: OptionsQuoteDetail | None = Field(default=None, alias="Option")
+    week_52: Week52QuoteDetail | None = Field(default=None, alias="Week52")
+
+    # Backwards compatibility alias (deprecated, use all_ instead)
+    @property
+    def all_data(self) -> AllQuoteDetail | None:
+        """Deprecated: Use all_ instead."""
+        return self.all_
+
+    # Flattened common fields for convenience - checks all detail types
     @property
     def last_trade(self) -> Decimal | None:
-        return self.all_data.last_trade if self.all_data else None
+        """Get last trade price from any available detail type."""
+        if self.all_:
+            return self.all_.last_trade
+        if self.fundamental:
+            return self.fundamental.last_trade
+        if self.intraday:
+            return self.intraday.last_trade
+        if self.option:
+            return self.option.last_trade
+        if self.week_52:
+            return self.week_52.last_trade
+        return None
+
+    @property
+    def company_name(self) -> str | None:
+        """Get company name from any available detail type."""
+        if self.all_:
+            return self.all_.company_name
+        if self.fundamental:
+            return self.fundamental.company_name
+        if self.intraday:
+            return self.intraday.company_name
+        if self.option:
+            return self.option.company_name
+        if self.week_52:
+            return self.week_52.company_name
+        return None
 
     @property
     def change(self) -> Decimal | None:
-        return self.all_data.change if self.all_data else None
+        """Get change from available detail types (backwards compat)."""
+        if self.all_:
+            return self.all_.change
+        return None
 
     @property
     def change_pct(self) -> Decimal | None:
-        return self.all_data.change_pct if self.all_data else None
+        """Get change percentage from available detail types (backwards compat)."""
+        if self.all_:
+            return self.all_.change_pct
+        return None
+
+    @property
+    def change_close(self) -> Decimal | None:
+        """Get change from close from available detail types."""
+        if self.all_:
+            return self.all_.change_close
+        if self.intraday:
+            return self.intraday.change_close
+        return None
+
+    @property
+    def change_close_pct(self) -> Decimal | None:
+        """Get change from close percentage from available detail types."""
+        if self.all_:
+            return self.all_.change_close_pct
+        if self.intraday:
+            return self.intraday.change_close_pct
+        return None
 
     @property
     def volume(self) -> int | None:
-        return self.all_data.total_volume if self.all_data else None
+        """Get total volume from available detail types."""
+        if self.all_:
+            return self.all_.total_volume
+        if self.intraday:
+            return self.intraday.total_volume
+        if self.week_52:
+            return self.week_52.total_volume
+        return None
 
     model_config = {"populate_by_name": True}
 
