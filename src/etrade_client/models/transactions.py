@@ -29,6 +29,8 @@ class TransactionBrokerage(BaseModel):
     fee: Decimal | None = Field(default=None)
     display_symbol: str | None = Field(default=None, alias="displaySymbol")
     settlement_date: datetime | None = Field(default=None, alias="settlementDate")
+    order_no: str | None = Field(default=None, alias="orderNo")
+    check_no: str | None = Field(default=None, alias="checkNo")
 
     model_config = {"populate_by_name": True}
 
@@ -51,6 +53,8 @@ class Transaction(BaseModel):
 
     # Sometimes present
     description2: str | None = Field(default=None)
+    details_uri: str | None = Field(default=None, alias="detailsURI")
+    inst_type: str | None = Field(default=None, alias="instType")
 
     # Context-specific (may not always be present)
     category: dict[str, Any] | None = Field(default=None, alias="Category")

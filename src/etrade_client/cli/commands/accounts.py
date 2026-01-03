@@ -238,6 +238,11 @@ async def list_dividends(
         "-o",
         help="Output format.",
     ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Show matching details for dividend/DRIP correlation.",
+    ),
 ) -> None:
     """List dividend transactions for an account.
 
@@ -248,6 +253,7 @@ async def list_dividends(
     DRIP transactions show as negative amounts with shares purchased.
 
     Use --by-symbol and/or --by-month to group and summarize dividends.
+    Use --debug to inspect transaction fields for correlation analysis.
     """
     config: CLIConfig = ctx.obj
 
@@ -390,12 +396,44 @@ async def list_dividends(
 
                 # Consider it a match if amounts are within 10% or $0.10
                 is_drip = False
+                match_method = None
                 if best_match is not None:
                     threshold = max(div_amount * Decimal("0.10"), Decimal("0.10"))
                     if best_diff <= threshold:
                         is_drip = True
                         used_reinvestments.add(best_match.transaction_id)
-                        total_reinvested += div_amount
+                        total_reinvested += abs(best_match.amount)
+                        match_method = "exact" if best_diff == 0 else "threshold"
+
+                # Debug output: show transaction fields for correlation analysis
+                if debug:
+                    print(f"\n--- Dividend: {tx_symbol} ${div_amount:,.2f} on {date_str} ---")
+                    print(f"  tx_id: {div_tx.transaction_id}")
+                    print(f"  order_no: {div_tx.brokerage.order_no if div_tx.brokerage else None}")
+                    print(f"  description: {div_tx.description}")
+                    print(f"  description2: {div_tx.description2}")
+                    print(f"  inst_type: {div_tx.inst_type}")
+                    if is_drip and best_match:
+                        print(f"  MATCHED reinvestment ({match_method}, diff=${best_diff:.4f}):")
+                        print(f"    reinv_tx_id: {best_match.transaction_id}")
+                        reinv_brok = best_match.brokerage
+                        print(f"    reinv_order_no: {reinv_brok.order_no if reinv_brok else None}")
+                        print(f"    reinv_amount: ${abs(best_match.amount):,.2f}")
+                        print(f"    reinv_description: {best_match.description}")
+                        print(f"    reinv_description2: {best_match.description2}")
+                    elif best_match:
+                        print(f"  NO MATCH (diff=${best_diff:.4f} > threshold=${threshold:.4f})")
+                    else:
+                        print("  NO MATCH (no reinvestment candidates)")
+
+                # Calculate actual reinvested vs cash amounts
+                # Use actual reinvestment amount (may differ slightly from dividend)
+                if is_drip and best_match:
+                    reinvested_amt = abs(best_match.amount)
+                    cash_amt = div_amount - reinvested_amt
+                else:
+                    reinvested_amt = Decimal("0")
+                    cash_amt = div_amount
 
                 # Update group totals
                 if by_symbol and by_month:
@@ -410,17 +448,22 @@ async def list_dividends(
                 if group_key is not None:
                     group_totals[group_key]["amount"] += div_amount
                     group_totals[group_key]["count"] += 1
-                    if is_drip:
-                        group_totals[group_key]["reinvested"] += div_amount
-                    else:
-                        group_totals[group_key]["cash"] += div_amount
+                    group_totals[group_key]["reinvested"] += reinvested_amt
+                    group_totals[group_key]["cash"] += cash_amt
 
                 # Build individual row (for non-grouped output)
+                # Format DRIP boolean based on output format
+                if output == OutputFormat.CSV:
+                    drip_val = "true" if is_drip else "false"
+                else:
+                    drip_val = "Yes" if is_drip else ""
                 row = {
                     "date": date_str,
                     "symbol": tx_symbol,
                     "amount": f"${div_amount:,.2f}",
-                    "drip": "Yes" if is_drip else "",
+                    "reinvested": f"${reinvested_amt:,.2f}",
+                    "cash": f"${cash_amt:,.2f}",
+                    "drip": drip_val,
                     "shares": "",
                     "price": "",
                 }
@@ -604,13 +647,16 @@ async def list_dividends(
         else:
             # Non-grouped output (original behavior)
             # Add summary row for table output
+            total_cash = total_dividends - total_reinvested
             if output == OutputFormat.TABLE and len(dividend_rows) > 1:
                 dividend_rows.append(
                     {
                         "date": "---",
                         "symbol": "TOTAL",
                         "amount": f"${total_dividends:,.2f}",
-                        "drip": f"(${total_reinvested:,.2f} reinvested)",
+                        "reinvested": f"${total_reinvested:,.2f}",
+                        "cash": f"${total_cash:,.2f}",
+                        "drip": "",
                         "shares": "",
                         "price": "",
                     }
