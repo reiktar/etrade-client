@@ -1,6 +1,6 @@
 """Accounts commands."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import typer
@@ -243,6 +243,11 @@ async def list_dividends(
         "--debug",
         help="Show matching details for dividend/DRIP correlation.",
     ),
+    split_drip: bool = typer.Option(
+        False,
+        "--split-drip",
+        help="Output each dividend as separate cash/reinvested rows (simplified columns).",
+    ),
 ) -> None:
     """List dividend transactions for an account.
 
@@ -254,6 +259,7 @@ async def list_dividends(
 
     Use --by-symbol and/or --by-month to group and summarize dividends.
     Use --debug to inspect transaction fields for correlation analysis.
+    Use --split-drip to output separate rows for reinvested and cash portions.
     """
     config: CLIConfig = ctx.obj
 
@@ -266,6 +272,11 @@ async def list_dividends(
     date_options_count = sum([ytd, full_history, bool(from_date or to_date)])
     if date_options_count > 1:
         print_error("Options --ytd, --full-history, and --from/--to are mutually exclusive.")
+        raise typer.Exit(1)
+
+    # Validate --split-drip conflicts with grouping options
+    if split_drip and (by_symbol or by_month):
+        print_error("--split-drip cannot be used with --by-symbol or --by-month.")
         raise typer.Exit(1)
 
     # Handle convenience date options
@@ -316,12 +327,41 @@ async def list_dividends(
             tx_symbol = tx.symbol
             desc_upper = (tx.description or "").upper()
 
+            # Detect pending/incomplete transactions
+            # E*Trade uses Unix epoch (1970-01-01) for missing date fields
+            epoch = datetime(1970, 1, 1)
+            is_pending = tx.post_date == epoch
+            if tx.brokerage and tx.brokerage.settlement_date == epoch:
+                is_pending = True
+
+            # Skip pending transactions (incomplete data from E*Trade)
+            if is_pending:
+                if debug:
+                    tx_date = tx.transaction_date
+                    date_str = tx_date.strftime("%Y-%m-%d") if tx_date else ""
+                    tx_type = tx.transaction_type
+                    print(f"\n[SKIPPED - PENDING] {tx_type} ${tx.amount:,.2f} on {date_str}")
+                    print(f"  description: {tx.description}")
+                    print(f"  symbol: {tx_symbol or '(none)'}")
+                    print(f"  post_date: {tx.post_date.strftime('%Y-%m-%d')}")
+                continue
+
+            # Skip transactions without a symbol (e.g., money market interest)
+            if not tx_symbol:
+                if debug:
+                    tx_date = tx.transaction_date
+                    date_str = tx_date.strftime("%Y-%m-%d") if tx_date else ""
+                    tx_type = tx.transaction_type
+                    print(f"\n[SKIPPED - NO SYMBOL] {tx_type} ${tx.amount:,.2f} on {date_str}")
+                    print(f"  description: {tx.description}")
+                continue
+
             # Filter by symbol if specified
-            if symbol and (not tx_symbol or tx_symbol.upper() != symbol.upper()):
+            if symbol and tx_symbol.upper() != symbol.upper():
                 continue
 
             date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else ""
-            key = (date_str, tx_symbol or "")
+            key = (date_str, tx_symbol)
 
             # Identify dividend transactions
             if tx.transaction_type == "Dividend":
@@ -451,31 +491,51 @@ async def list_dividends(
                     group_totals[group_key]["reinvested"] += reinvested_amt
                     group_totals[group_key]["cash"] += cash_amt
 
-                # Build individual row (for non-grouped output)
-                # Format DRIP boolean based on output format
-                if output == OutputFormat.CSV:
-                    drip_val = "true" if is_drip else "false"
+                # Build individual row(s) (for non-grouped output)
+                if split_drip:
+                    # Split mode: separate rows for reinvested and cash portions
+                    # Use raw numeric amounts for spreadsheet compatibility
+                    if reinvested_amt > 0:
+                        drip_val = "true" if output == OutputFormat.CSV else "Yes"
+                        dividend_rows.append({
+                            "date": date_str,
+                            "symbol": tx_symbol,
+                            "amount": float(reinvested_amt),
+                            "drip": drip_val,
+                        })
+                    if cash_amt > 0:
+                        drip_val = "false" if output == OutputFormat.CSV else ""
+                        dividend_rows.append({
+                            "date": date_str,
+                            "symbol": tx_symbol,
+                            "amount": float(cash_amt),
+                            "drip": drip_val,
+                        })
                 else:
-                    drip_val = "Yes" if is_drip else ""
-                row = {
-                    "date": date_str,
-                    "symbol": tx_symbol,
-                    "amount": f"${div_amount:,.2f}",
-                    "reinvested": f"${reinvested_amt:,.2f}",
-                    "cash": f"${cash_amt:,.2f}",
-                    "drip": drip_val,
-                    "shares": "",
-                    "price": "",
-                }
+                    # Standard mode: single row with all columns
+                    if output == OutputFormat.CSV:
+                        drip_val = "true" if is_drip else "false"
+                    else:
+                        drip_val = "Yes" if is_drip else ""
+                    row = {
+                        "date": date_str,
+                        "symbol": tx_symbol,
+                        "amount": f"${div_amount:,.2f}",
+                        "reinvested": f"${reinvested_amt:,.2f}",
+                        "cash": f"${cash_amt:,.2f}",
+                        "drip": drip_val,
+                        "shares": "",
+                        "price": "",
+                    }
 
-                # Add DRIP details from matched reinvestment
-                if is_drip and best_match and best_match.brokerage:
-                    if best_match.brokerage.quantity:
-                        row["shares"] = f"{best_match.brokerage.quantity:.3f}"
-                    if best_match.brokerage.price:
-                        row["price"] = f"${best_match.brokerage.price:,.2f}"
+                    # Add DRIP details from matched reinvestment
+                    if is_drip and best_match and best_match.brokerage:
+                        if best_match.brokerage.quantity:
+                            row["shares"] = f"{best_match.brokerage.quantity:.3f}"
+                        if best_match.brokerage.price:
+                            row["price"] = f"${best_match.brokerage.price:,.2f}"
 
-                dividend_rows.append(row)
+                    dividend_rows.append(row)
 
                 # Check limit (only for non-grouped output)
                 if not (by_symbol or by_month):
@@ -646,20 +706,24 @@ async def list_dividends(
 
         else:
             # Non-grouped output (original behavior)
-            # Add summary row for table output
-            total_cash = total_dividends - total_reinvested
-            if output == OutputFormat.TABLE and len(dividend_rows) > 1:
-                dividend_rows.append(
-                    {
-                        "date": "---",
-                        "symbol": "TOTAL",
-                        "amount": f"${total_dividends:,.2f}",
-                        "reinvested": f"${total_reinvested:,.2f}",
-                        "cash": f"${total_cash:,.2f}",
-                        "drip": "",
-                        "shares": "",
-                        "price": "",
-                    }
-                )
+            if split_drip:
+                # Split mode: no TOTAL row, different title
+                format_output(dividend_rows, output, title="Dividends (Split)")
+            else:
+                # Standard mode: add summary row for table output
+                total_cash = total_dividends - total_reinvested
+                if output == OutputFormat.TABLE and len(dividend_rows) > 1:
+                    dividend_rows.append(
+                        {
+                            "date": "---",
+                            "symbol": "TOTAL",
+                            "amount": f"${total_dividends:,.2f}",
+                            "reinvested": f"${total_reinvested:,.2f}",
+                            "cash": f"${total_cash:,.2f}",
+                            "drip": "",
+                            "shares": "",
+                            "price": "",
+                        }
+                    )
 
-            format_output(dividend_rows, output, title="Dividends")
+                format_output(dividend_rows, output, title="Dividends")
