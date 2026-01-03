@@ -764,18 +764,26 @@ class FieldTypeAnalyzer:
     ) -> dict[str, dict[str, dict[str, Any]]]:
         """Analyze field coverage WITHIN each transaction type.
 
-        For each type, calculates what percentage of transactions have each field.
-        This reveals required vs optional fields per type.
+        For each type, calculates:
+        - What percentage of transactions have each field (coverage)
+        - What percentage of present values are null (null rate)
+        - Whether the field needs to allow None in Python
 
         Returns: {
             tx_type: {
                 field: {
-                    "count": int,
-                    "total": int,
-                    "coverage_pct": float,
+                    "count": int,           # times field is present
+                    "total": int,           # total transactions of this type
+                    "coverage_pct": float,  # presence percentage
+                    "null_count": int,      # times field value is null
+                    "null_pct": float,      # null percentage of present values
+                    "non_null_count": int,  # times field has actual value
                     "status": "required" | "optional" | "absent",
-                    "dominant_type": str,
-                    "types": dict[str, int]
+                    "nullable": bool,       # True if nulls observed
+                    "needs_none": bool,     # True if Python type needs | None
+                    "dominant_type": str,   # most common non-null type
+                    "types": dict[str, int],
+                    "python_type": str,     # recommended Python annotation
                 }
             }
         }
@@ -798,6 +806,12 @@ class FieldTypeAnalyzer:
                     count = sum(type_counts.values())
                     coverage_pct = (count / type_total) * 100
 
+                    # Extract null count
+                    null_count = type_counts.get("null", 0)
+                    non_null_count = count - null_count
+                    null_pct = (null_count / count * 100) if count > 0 else 0.0
+
+                    # Determine status
                     if coverage_pct == 100.0:
                         status = "required"
                     elif coverage_pct > 0:
@@ -805,25 +819,105 @@ class FieldTypeAnalyzer:
                     else:
                         status = "absent"
 
+                    # Determine if field needs | None in Python
+                    # Needs None if: field can be absent OR field can be null
+                    nullable = null_count > 0
+                    needs_none = coverage_pct < 100.0 or nullable
+
+                    # Get Python type annotation
+                    python_type = self.get_python_type_for_field(
+                        type_counts, needs_none
+                    )
+
                     result[tx_type][field] = {
                         "count": count,
                         "total": type_total,
                         "coverage_pct": round(coverage_pct, 1),
+                        "null_count": null_count,
+                        "null_pct": round(null_pct, 1),
+                        "non_null_count": non_null_count,
                         "status": status,
+                        "nullable": nullable,
+                        "needs_none": needs_none,
                         "dominant_type": self.get_dominant_type(type_counts),
                         "types": type_counts,
+                        "python_type": python_type,
                     }
                 else:
                     result[tx_type][field] = {
                         "count": 0,
                         "total": type_total,
                         "coverage_pct": 0.0,
+                        "null_count": 0,
+                        "null_pct": 0.0,
+                        "non_null_count": 0,
                         "status": "absent",
+                        "nullable": False,
+                        "needs_none": True,  # Absent fields need None
                         "dominant_type": None,
                         "types": {},
+                        "python_type": "None",
                     }
 
         return result
+
+    def get_python_type_for_field(
+        self, type_counts: dict[str, int], needs_none: bool
+    ) -> str:
+        """Generate Python type annotation for a field.
+
+        Args:
+            type_counts: Dict of {json_type: count}
+            needs_none: Whether the type needs | None (absent or nullable)
+
+        Returns:
+            Python type annotation string like "str", "Decimal", "str | None"
+        """
+        types = set(type_counts.keys())
+
+        # Remove null - handled by needs_none
+        types.discard("null")
+
+        # Normalize empty variants to their base types
+        if "str(empty)" in types:
+            types.discard("str(empty)")
+            types.add("str")
+        if "list(empty)" in types:
+            types.discard("list(empty)")
+            types.add("list")
+        if "dict(empty)" in types:
+            types.discard("dict(empty)")
+            types.add("dict")
+
+        if not types:
+            return "None"
+
+        # Map JSON types to Python types
+        type_mapping = {
+            "str": "str",
+            "int": "int",
+            "float": "Decimal",
+            "bool": "bool",
+            "list": "list[Any]",
+            "dict": "dict[str, Any]",
+        }
+
+        # Single type
+        if len(types) == 1:
+            t = next(iter(types))
+            python_type = type_mapping.get(t, t)
+        # Mixed int/float -> Decimal
+        elif types <= {"int", "float"}:
+            python_type = "Decimal"
+        else:
+            # Multiple types - create union
+            python_types = sorted(type_mapping.get(t, t) for t in types)
+            python_type = " | ".join(python_types)
+
+        # Add | None if needed
+        if needs_none:
+            return f"{python_type} | None"
+        return python_type
 
     def generate_per_type_breakdown(
         self, within_type_coverage: dict[str, dict[str, dict[str, Any]]]
@@ -832,8 +926,8 @@ class FieldTypeAnalyzer:
 
         Returns: {
             tx_type: {
-                "required": [field, ...],  # 100% coverage
-                "optional": [field (pct%), ...],  # 1-99% coverage
+                "required": [field: python_type, ...],  # 100% coverage
+                "optional": [field: python_type (coverage%, null%), ...],
                 "absent": [field, ...]  # 0% coverage
             }
         }
@@ -847,13 +941,25 @@ class FieldTypeAnalyzer:
 
             for field, info in sorted(within_type_coverage[tx_type].items()):
                 status = info["status"]
+                python_type = info["python_type"]
+
                 if status == "required":
-                    dtype = info["dominant_type"]
-                    required.append(f"{field}: {dtype}")
+                    # Show null% if field has null values even at 100% coverage
+                    null_pct = info.get("null_pct", 0.0)
+                    if null_pct > 0:
+                        required.append(f"{field}: {python_type} (null: {null_pct}%)")
+                    else:
+                        required.append(f"{field}: {python_type}")
                 elif status == "optional":
-                    dtype = info["dominant_type"]
-                    pct = info["coverage_pct"]
-                    optional.append(f"{field}: {dtype} ({pct}%)")
+                    cov_pct = info["coverage_pct"]
+                    null_pct = info.get("null_pct", 0.0)
+                    # Show coverage and null% for optional fields
+                    if null_pct > 0:
+                        optional.append(
+                            f"{field}: {python_type} (cov: {cov_pct}%, null: {null_pct}%)"
+                        )
+                    else:
+                        optional.append(f"{field}: {python_type} (cov: {cov_pct}%)")
                 else:
                     absent.append(field)
 
@@ -870,7 +976,7 @@ class FieldTypeAnalyzer:
     ) -> list[dict[str, Any]]:
         """Generate a coverage percentage matrix across all transaction types.
 
-        Returns list of rows with coverage percentages instead of counts.
+        Returns list of rows with Python type annotations and coverage info.
         """
         # Collect all fields
         all_fields: set[str] = set()
@@ -882,24 +988,34 @@ class FieldTypeAnalyzer:
             row: dict[str, Any] = {"field": field}
             types_with_100pct = 0
             types_with_any = 0
+            types_needing_none = 0
 
             for tx_type in self.type_names:
                 info = within_type_coverage[tx_type].get(field, {})
                 pct = info.get("coverage_pct", 0.0)
-                dtype = info.get("dominant_type")
+                python_type = info.get("python_type", "-")
+                needs_none = info.get("needs_none", True)
 
                 if pct == 100.0:
-                    row[tx_type] = f"{dtype} ✓"
+                    null_pct = info.get("null_pct", 0.0)
+                    if null_pct > 0:
+                        row[tx_type] = f"{python_type} (n:{null_pct:.0f}%)"
+                    else:
+                        row[tx_type] = f"{python_type} ✓"
                     types_with_100pct += 1
                     types_with_any += 1
                 elif pct > 0:
-                    row[tx_type] = f"{dtype} {pct:.0f}%"
+                    row[tx_type] = f"{python_type} ({pct:.0f}%)"
                     types_with_any += 1
                 else:
                     row[tx_type] = "-"
 
+                if needs_none:
+                    types_needing_none += 1
+
             row["required_in"] = f"{types_with_100pct}/{self.num_types}"
             row["present_in"] = f"{types_with_any}/{self.num_types}"
+            row["needs_none"] = f"{types_needing_none}/{self.num_types}"
             rows.append(row)
 
         return rows
