@@ -759,6 +759,151 @@ class FieldTypeAnalyzer:
             "type_variance": type_variance,
         }
 
+    def analyze_within_type_coverage(
+        self, per_type_analysis: dict[str, dict[str, dict[str, int]]]
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        """Analyze field coverage WITHIN each transaction type.
+
+        For each type, calculates what percentage of transactions have each field.
+        This reveals required vs optional fields per type.
+
+        Returns: {
+            tx_type: {
+                field: {
+                    "count": int,
+                    "total": int,
+                    "coverage_pct": float,
+                    "status": "required" | "optional" | "absent",
+                    "dominant_type": str,
+                    "types": dict[str, int]
+                }
+            }
+        }
+        """
+        result: dict[str, dict[str, dict[str, Any]]] = {}
+
+        # Collect all fields across all types
+        all_fields: set[str] = set()
+        for fields in per_type_analysis.values():
+            all_fields.update(fields.keys())
+
+        for tx_type in self.type_names:
+            type_total = len(self.by_type[tx_type])
+            type_fields = per_type_analysis.get(tx_type, {})
+            result[tx_type] = {}
+
+            for field in sorted(all_fields):
+                if field in type_fields:
+                    type_counts = type_fields[field]
+                    count = sum(type_counts.values())
+                    coverage_pct = (count / type_total) * 100
+
+                    if coverage_pct == 100.0:
+                        status = "required"
+                    elif coverage_pct > 0:
+                        status = "optional"
+                    else:
+                        status = "absent"
+
+                    result[tx_type][field] = {
+                        "count": count,
+                        "total": type_total,
+                        "coverage_pct": round(coverage_pct, 1),
+                        "status": status,
+                        "dominant_type": self.get_dominant_type(type_counts),
+                        "types": type_counts,
+                    }
+                else:
+                    result[tx_type][field] = {
+                        "count": 0,
+                        "total": type_total,
+                        "coverage_pct": 0.0,
+                        "status": "absent",
+                        "dominant_type": None,
+                        "types": {},
+                    }
+
+        return result
+
+    def generate_per_type_breakdown(
+        self, within_type_coverage: dict[str, dict[str, dict[str, Any]]]
+    ) -> dict[str, dict[str, list[str]]]:
+        """Generate per-type field breakdown categorized by status.
+
+        Returns: {
+            tx_type: {
+                "required": [field, ...],  # 100% coverage
+                "optional": [field (pct%), ...],  # 1-99% coverage
+                "absent": [field, ...]  # 0% coverage
+            }
+        }
+        """
+        result: dict[str, dict[str, list[str]]] = {}
+
+        for tx_type in self.type_names:
+            required: list[str] = []
+            optional: list[str] = []
+            absent: list[str] = []
+
+            for field, info in sorted(within_type_coverage[tx_type].items()):
+                status = info["status"]
+                if status == "required":
+                    dtype = info["dominant_type"]
+                    required.append(f"{field}: {dtype}")
+                elif status == "optional":
+                    dtype = info["dominant_type"]
+                    pct = info["coverage_pct"]
+                    optional.append(f"{field}: {dtype} ({pct}%)")
+                else:
+                    absent.append(field)
+
+            result[tx_type] = {
+                "required": required,
+                "optional": optional,
+                "absent": absent,
+            }
+
+        return result
+
+    def generate_coverage_matrix(
+        self, within_type_coverage: dict[str, dict[str, dict[str, Any]]]
+    ) -> list[dict[str, Any]]:
+        """Generate a coverage percentage matrix across all transaction types.
+
+        Returns list of rows with coverage percentages instead of counts.
+        """
+        # Collect all fields
+        all_fields: set[str] = set()
+        for tx_type in self.type_names:
+            all_fields.update(within_type_coverage[tx_type].keys())
+
+        rows: list[dict[str, Any]] = []
+        for field in sorted(all_fields):
+            row: dict[str, Any] = {"field": field}
+            types_with_100pct = 0
+            types_with_any = 0
+
+            for tx_type in self.type_names:
+                info = within_type_coverage[tx_type].get(field, {})
+                pct = info.get("coverage_pct", 0.0)
+                dtype = info.get("dominant_type")
+
+                if pct == 100.0:
+                    row[tx_type] = f"{dtype} ✓"
+                    types_with_100pct += 1
+                    types_with_any += 1
+                elif pct > 0:
+                    row[tx_type] = f"{dtype} {pct:.0f}%"
+                    types_with_any += 1
+                else:
+                    row[tx_type] = "-"
+
+            row["required_in"] = f"{types_with_100pct}/{self.num_types}"
+            row["present_in"] = f"{types_with_any}/{self.num_types}"
+            rows.append(row)
+
+        return rows
+
     def generate_field_matrix(
         self, per_type_analysis: dict[str, dict[str, dict[str, int]]]
     ) -> list[dict[str, Any]]:
@@ -866,6 +1011,18 @@ def analyze_transactions(
         "--show-matrix",
         "-m",
         help="Show field presence matrix across all types.",
+    ),
+    show_per_type: bool = typer.Option(
+        False,
+        "--show-per-type",
+        "-p",
+        help="Show per-type field breakdown (required/optional/absent).",
+    ),
+    show_coverage_matrix: bool = typer.Option(
+        False,
+        "--show-coverage-matrix",
+        "-c",
+        help="Show coverage percentage matrix (✓=100%, X%=partial).",
     ),
     output_json: Path | None = typer.Option(
         None,
@@ -1037,6 +1194,73 @@ def analyze_transactions(
             line += row["total_types"]
             print(line)
 
+    # Run within-type analysis for per-type breakdown and coverage matrix
+    within_type_coverage = analyzer.analyze_within_type_coverage(per_type_analysis)
+
+    # === Per-Type Field Breakdown ===
+    if show_per_type:
+        print("\n" + "=" * 60)
+        print("PER-TYPE FIELD BREAKDOWN")
+        print("=" * 60)
+        print("Fields categorized as required/optional/absent within each type:\n")
+
+        breakdown = analyzer.generate_per_type_breakdown(within_type_coverage)
+
+        for tx_type in analyzer.type_names:
+            type_count = len(by_type[tx_type])
+            info = breakdown[tx_type]
+            print(f"\n{tx_type} ({type_count} transactions):")
+
+            print("  Required (100%):")
+            if info["required"]:
+                for field in info["required"]:
+                    print(f"    - {field}")
+            else:
+                print("    (none)")
+
+            if info["optional"]:
+                print("  Optional (partial coverage):")
+                for field in info["optional"]:
+                    print(f"    - {field}")
+
+            # Only show absent count, not full list
+            if info["absent"]:
+                print(f"  Absent: {len(info['absent'])} fields")
+
+    # === Coverage Percentage Matrix ===
+    if show_coverage_matrix:
+        print("\n" + "=" * 60)
+        print("COVERAGE PERCENTAGE MATRIX")
+        print("=" * 60)
+        print("✓ = 100% (required), X% = partial (optional), - = absent\n")
+
+        coverage_matrix = analyzer.generate_coverage_matrix(within_type_coverage)
+
+        # Determine column widths
+        type_names = analyzer.type_names
+        field_width = max(len(r["field"]) for r in coverage_matrix) + 2
+        type_width = 10
+
+        # Header
+        header = "Field".ljust(field_width)
+        for tx_type in type_names:
+            abbrev = tx_type[:8] if len(tx_type) > 8 else tx_type
+            header += abbrev.ljust(type_width)
+        header += "Req/Pres"
+        print(header)
+        print("-" * len(header))
+
+        # Rows
+        for row in coverage_matrix:
+            line = row["field"].ljust(field_width)
+            for tx_type in type_names:
+                val = row.get(tx_type, "-")
+                if val != "-":
+                    val = val[:8] if len(val) > 8 else val
+                line += val.ljust(type_width)
+            line += f"{row['required_in']} / {row['present_in']}"
+            print(line)
+
     # === Save to JSON ===
     if output_json:
         results = {
@@ -1054,6 +1278,7 @@ def analyze_transactions(
             },
             "cross_type_analysis": cross_type,
             "per_type_analysis": per_type_analysis,
+            "within_type_coverage": within_type_coverage,
         }
 
         output_json.write_text(json.dumps(results, indent=2))
