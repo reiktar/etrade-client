@@ -327,12 +327,23 @@ async def list_dividends(
             tx_symbol = tx.symbol
             desc_upper = (tx.description or "").upper()
 
+            # Skip transactions without a symbol (e.g., money market interest)
+            # These are typically not actual stock dividends
+            if not tx_symbol:
+                if debug:
+                    tx_date = tx.transaction_date
+                    date_str = tx_date.strftime("%Y-%m-%d") if tx_date else ""
+                    tx_type = tx.transaction_type
+                    print(f"\n[SKIPPED] No symbol: {tx_type} ${tx.amount:,.2f} on {date_str}")
+                    print(f"  description: {tx.description}")
+                continue
+
             # Filter by symbol if specified
-            if symbol and (not tx_symbol or tx_symbol.upper() != symbol.upper()):
+            if symbol and tx_symbol.upper() != symbol.upper():
                 continue
 
             date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else ""
-            key = (date_str, tx_symbol or "")
+            key = (date_str, tx_symbol)
 
             # Identify dividend transactions
             if tx.transaction_type == "Dividend":

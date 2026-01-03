@@ -63,11 +63,20 @@ class Transaction(BaseModel):
 
     @property
     def symbol(self) -> str | None:
-        """Get the symbol from the transaction."""
+        """Get the symbol from the transaction.
+
+        Checks multiple locations where E*Trade may store the symbol:
+        1. brokerage.product.symbol
+        2. brokerage.product.productId["symbol"]
+        3. brokerage.display_symbol
+        """
         if self.brokerage:
             sym = None
             if self.brokerage.product:
                 sym = self.brokerage.product.symbol
+                # Also check productId dict for symbol
+                if not sym and self.brokerage.product.product_id:
+                    sym = self.brokerage.product.product_id.get("symbol")
             if not sym:
                 sym = self.brokerage.display_symbol
             # Return None for empty/whitespace-only symbols
