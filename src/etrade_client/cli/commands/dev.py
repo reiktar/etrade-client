@@ -484,3 +484,202 @@ def show_manifest(
                 f"    {dr['start_date']} to {dr['end_date']}: "
                 f"{dr['transaction_count']} transactions ({dr['page_count']} pages)"
             )
+
+
+class TransactionAnalyzer:
+    """Analyzes collected transaction data to discover types and field patterns."""
+
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = data_dir
+        self.manifest_manager = ManifestManager(data_dir)
+
+    def load_all_transactions(self) -> list[dict[str, Any]]:
+        """Load all transactions from collected data."""
+        transactions: list[dict[str, Any]] = []
+
+        # Find all page files
+        for page_file in self.data_dir.rglob("page_*.json"):
+            page_data = json.loads(page_file.read_text())
+            tx_response = page_data.get("TransactionListResponse", {})
+            tx_list = tx_response.get("Transaction", [])
+            if isinstance(tx_list, dict):
+                tx_list = [tx_list]
+            transactions.extend(tx_list)
+
+        return transactions
+
+    def analyze_types(
+        self, transactions: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group transactions by transactionType."""
+        by_type: dict[str, list[dict[str, Any]]] = {}
+        for tx in transactions:
+            tx_type = tx.get("transactionType", "UNKNOWN")
+            if tx_type not in by_type:
+                by_type[tx_type] = []
+            by_type[tx_type].append(tx)
+        return by_type
+
+    def analyze_fields(
+        self, transactions: list[dict[str, Any]], prefix: str = ""
+    ) -> dict[str, dict[str, int]]:
+        """Analyze field presence across transactions.
+
+        Returns dict of field_path -> {"present": count, "absent": count}
+        """
+        field_stats: dict[str, dict[str, int]] = {}
+        total = len(transactions)
+
+        # Collect all unique field paths
+        all_fields: set[str] = set()
+        for tx in transactions:
+            all_fields.update(self._get_field_paths(tx, prefix))
+
+        # Count presence for each field
+        for field in all_fields:
+            present = sum(1 for tx in transactions if self._has_field(tx, field, prefix))
+            field_stats[field] = {"present": present, "absent": total - present}
+
+        return field_stats
+
+    def _get_field_paths(self, obj: Any, prefix: str = "") -> set[str]:
+        """Recursively get all field paths from an object."""
+        paths: set[str] = set()
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                full_path = f"{prefix}.{key}" if prefix else key
+                paths.add(full_path)
+                paths.update(self._get_field_paths(value, full_path))
+        return paths
+
+    def _has_field(self, tx: dict[str, Any], field: str, prefix: str = "") -> bool:
+        """Check if transaction has a field (handles nested paths)."""
+        parts = field.split(".") if not prefix else field[len(prefix) + 1 :].split(".")
+        current = tx
+        for part in parts:
+            if not isinstance(current, dict) or part not in current:
+                return False
+            current = current[part]
+        return True
+
+    def categorize_fields(
+        self, field_stats: dict[str, dict[str, int]], total: int
+    ) -> tuple[list[str], list[str], list[str]]:
+        """Categorize fields into always/sometimes/never present."""
+        always: list[str] = []
+        sometimes: list[str] = []
+        never: list[str] = []
+
+        for field, stats in sorted(field_stats.items()):
+            present = stats["present"]
+            if present == total:
+                always.append(field)
+            elif present == 0:
+                never.append(field)
+            else:
+                sometimes.append(f"{field} ({present}/{total})")
+
+        return always, sometimes, never
+
+
+@app.command("analyze-transactions")
+def analyze_transactions(
+    data_dir: Path = typer.Option(
+        Path(".data/transactions"),
+        "--data-dir",
+        "-d",
+        help="Data directory containing collected transactions.",
+    ),
+    show_fields: bool = typer.Option(
+        False,
+        "--show-fields",
+        "-f",
+        help="Show field presence analysis for each type.",
+    ),
+    output_json: Path | None = typer.Option(
+        None,
+        "--output-json",
+        "-o",
+        help="Save analysis results to JSON file.",
+    ),
+) -> None:
+    """Analyze collected transactions to discover types and field patterns.
+
+    Reads all collected raw transaction data and produces:
+    - Transaction type distribution (count per type)
+    - Field presence analysis per type (always/sometimes/never present)
+
+    Examples:
+        # Basic type distribution
+        etrade-cli dev analyze-transactions
+
+        # Include field analysis
+        etrade-cli dev analyze-transactions --show-fields
+
+        # Save to JSON for further processing
+        etrade-cli dev analyze-transactions -o analysis.json
+    """
+    manifest_path = data_dir / "manifest.json"
+
+    if not manifest_path.exists():
+        print_error(f"No manifest found at {manifest_path}")
+        print("Run 'etrade-cli dev collect-transactions' first.")
+        raise typer.Exit(1)
+
+    analyzer = TransactionAnalyzer(data_dir)
+
+    print("\nLoading transactions...")
+    transactions = analyzer.load_all_transactions()
+
+    if not transactions:
+        print_error("No transactions found in collected data.")
+        raise typer.Exit(1)
+
+    print(f"Loaded {len(transactions)} transactions\n")
+
+    # Analyze by type
+    by_type = analyzer.analyze_types(transactions)
+
+    print("=== Transaction Type Distribution ===\n")
+    type_summary: dict[str, Any] = {}
+    for tx_type, txs in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        count = len(txs)
+        pct = (count / len(transactions)) * 100
+        print(f"  {tx_type}: {count} ({pct:.1f}%)")
+        type_summary[tx_type] = {"count": count, "percentage": round(pct, 2)}
+
+    if show_fields:
+        print("\n=== Field Presence by Type ===")
+
+        field_analysis: dict[str, Any] = {}
+        for tx_type, txs in sorted(by_type.items()):
+            print(f"\n{tx_type} ({len(txs)} transactions):")
+
+            field_stats = analyzer.analyze_fields(txs)
+            always, sometimes, never = analyzer.categorize_fields(field_stats, len(txs))
+
+            field_analysis[tx_type] = {
+                "always_present": always,
+                "sometimes_present": sometimes,
+                "never_present": never,
+            }
+
+            print("  Always present:")
+            for field in always:
+                print(f"    - {field}")
+
+            if sometimes:
+                print("  Sometimes present:")
+                for field in sometimes:
+                    print(f"    - {field}")
+
+    if output_json:
+        results = {
+            "total_transactions": len(transactions),
+            "type_distribution": type_summary,
+        }
+        if show_fields:
+            results["field_analysis"] = field_analysis
+
+        output_json.write_text(json.dumps(results, indent=2))
+        print_success(f"\nAnalysis saved to {output_json}")
