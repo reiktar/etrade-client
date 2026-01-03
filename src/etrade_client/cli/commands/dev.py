@@ -113,6 +113,7 @@ class RawTransactionCollector:
         total_transactions = 0
         page_num = 0
         marker = None
+        expected_total: int | None = None  # Captured from first page
 
         while True:
             page_num += 1
@@ -172,9 +173,14 @@ class RawTransactionCollector:
                 print(f"    Page {page_num}: {tx_count} transactions")
 
             # Check for more pages
+            # Note: E*Trade API sometimes returns moreTransactions=false incorrectly
+            # Capture totalCount from first page (subsequent pages may have different values)
+            # Use totalCount comparison as the reliable indicator
             marker = tx_response.get("marker")
-            more = tx_response.get("moreTransactions", False)
-            if not more or not marker:
+            if expected_total is None:
+                expected_total = tx_response.get("totalCount", 0)
+
+            if not marker or total_transactions >= expected_total:
                 break
 
         # Save chunk summary
