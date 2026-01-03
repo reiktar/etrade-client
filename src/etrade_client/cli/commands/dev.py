@@ -1303,11 +1303,58 @@ class ModelGenerator:
 
         return "\n".join(lines)
 
+    def _analyze_nested_field_requirements(
+        self, parent_field: str, child_prefix: str
+    ) -> dict[str, bool]:
+        """Analyze if child fields are always present when parent is non-empty.
+
+        Returns dict of {child_field: is_required_when_parent_present}
+        """
+        requirements: dict[str, bool] = {}
+
+        for tx_type in self.type_names:
+            type_coverage = self.within_type_coverage.get(tx_type, {})
+
+            # Get parent field info
+            parent_info = type_coverage.get(parent_field, {})
+            parent_types = parent_info.get("types", {})
+
+            # Count non-empty parent occurrences (dict vs dict(empty))
+            non_empty_parent_count = parent_types.get("dict", 0)
+
+            if non_empty_parent_count == 0:
+                continue  # No non-empty parents in this type
+
+            # Check each child field
+            for field, info in type_coverage.items():
+                if not field.startswith(child_prefix):
+                    continue
+
+                rel_field = field[len(child_prefix) :]
+                if "." in rel_field:  # Skip nested children
+                    continue
+
+                child_count = info.get("count", 0)
+
+                # If child count matches non-empty parent count, it's required
+                if rel_field not in requirements:
+                    requirements[rel_field] = True
+
+                if child_count != non_empty_parent_count:
+                    requirements[rel_field] = False
+
+        return requirements
+
     def _generate_pydantic_nested_models(
         self, base_fields: dict[str, dict[str, Any]]
     ) -> list[str]:
         """Generate nested Pydantic models (Product, Brokerage)."""
         lines: list[str] = []
+
+        # Analyze if product fields are required when product is present
+        product_requirements = self._analyze_nested_field_requirements(
+            "brokerage.product", "brokerage.product."
+        )
 
         # Collect product fields from all types
         all_product_fields: dict[str, dict[str, Any]] = {}
@@ -1325,12 +1372,32 @@ class ModelGenerator:
             lines.append("class Product(BaseModel):")
             lines.append('    """Product information within a brokerage transaction."""')
             lines.append("")
+
+            # Separate required and optional fields
+            required_fields = []
+            optional_fields = []
+
             for field, info in sorted(all_product_fields.items()):
                 python_type = info.get("python_type", "Any")
-                # All product fields are optional since not all types have them
-                if "| None" not in python_type and python_type != "None":
-                    python_type = f"{python_type} | None"
-                lines.append(f"    {field}: {python_type} = None")
+                # Remove | None from type if present (we'll add back if needed)
+                base_type = python_type.replace(" | None", "")
+
+                # Check if field is required when parent is present
+                is_required = product_requirements.get(field, False)
+
+                if is_required:
+                    required_fields.append((field, base_type))
+                else:
+                    optional_fields.append((field, base_type))
+
+            # Output required fields first (no default)
+            for field, python_type in required_fields:
+                lines.append(f"    {field}: {python_type}")
+
+            # Output optional fields with defaults
+            for field, python_type in optional_fields:
+                lines.append(f"    {field}: {python_type} | None = None")
+
             lines.append("")
             lines.append("")
 
@@ -1522,6 +1589,11 @@ class ModelGenerator:
         """Generate nested dataclass models."""
         lines: list[str] = []
 
+        # Analyze if product fields are required when product is present
+        product_requirements = self._analyze_nested_field_requirements(
+            "brokerage.product", "brokerage.product."
+        )
+
         # Collect product fields from all types
         all_product_fields: dict[str, dict[str, Any]] = {}
         for tx_type in self.type_names:
@@ -1539,11 +1611,29 @@ class ModelGenerator:
             lines.append("class Product:")
             lines.append('    """Product information within a brokerage transaction."""')
             lines.append("")
+
+            # Separate required and optional fields
+            required_fields = []
+            optional_fields = []
+
             for fld, info in sorted(all_product_fields.items()):
                 python_type = info.get("python_type", "Any")
-                if "| None" not in python_type and python_type != "None":
-                    python_type = f"{python_type} | None"
-                lines.append(f"    {fld}: {python_type} = None")
+                base_type = python_type.replace(" | None", "")
+                is_required = product_requirements.get(fld, False)
+
+                if is_required:
+                    required_fields.append((fld, base_type))
+                else:
+                    optional_fields.append((fld, base_type))
+
+            # Required fields first (no default)
+            for fld, python_type in required_fields:
+                lines.append(f"    {fld}: {python_type}")
+
+            # Optional fields with defaults
+            for fld, python_type in optional_fields:
+                lines.append(f"    {fld}: {python_type} | None = None")
+
             lines.append("")
             lines.append("")
 
