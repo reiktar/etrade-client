@@ -1098,6 +1098,619 @@ class FieldTypeAnalyzer:
         return f"{base} | None" if has_null else base
 
 
+class ModelGenerator:
+    """Generates Python model code from transaction analysis results."""
+
+    def __init__(
+        self,
+        cross_type: dict[str, Any],
+        within_type_coverage: dict[str, dict[str, dict[str, Any]]],
+        type_counts: dict[str, int],
+    ) -> None:
+        self.cross_type = cross_type
+        self.within_type_coverage = within_type_coverage
+        self.type_counts = type_counts
+        self.type_names = sorted(type_counts.keys())
+
+    def _sanitize_class_name(self, tx_type: str) -> str:
+        """Convert transaction type to valid Python class name."""
+        # Remove spaces, capitalize words
+        words = tx_type.replace("-", " ").split()
+        return "".join(word.capitalize() for word in words) + "Transaction"
+
+    def _sanitize_enum_name(self, tx_type: str) -> str:
+        """Convert transaction type to valid Python enum member name."""
+        # Convert to SCREAMING_SNAKE_CASE
+        result = tx_type.upper().replace(" ", "_").replace("-", "_")
+        # Handle special chars
+        result = "".join(c if c.isalnum() or c == "_" else "_" for c in result)
+        return result
+
+    def _get_field_python_type(
+        self, field_info: dict[str, Any], for_base: bool = False
+    ) -> str:
+        """Get Python type annotation for a field."""
+        python_type = field_info.get("python_type", "Any")
+        # For base class, we might want stricter types
+        if for_base and python_type == "None":
+            return "Any"
+        return python_type
+
+    def _is_nested_field(self, field: str) -> bool:
+        """Check if field is a nested path like brokerage.fee."""
+        return "." in field
+
+    def _get_top_level_fields(
+        self, field_infos: dict[str, dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
+        """Extract only top-level (non-nested) fields."""
+        return {f: info for f, info in field_infos.items() if not self._is_nested_field(f)}
+
+    def _get_nested_fields(
+        self, field_infos: dict[str, dict[str, Any]], prefix: str
+    ) -> dict[str, dict[str, Any]]:
+        """Extract fields nested under a prefix (e.g., 'brokerage.')."""
+        result = {}
+        prefix_dot = prefix + "."
+        for field, info in field_infos.items():
+            if field.startswith(prefix_dot):
+                # Remove the prefix to get the relative field name
+                relative = field[len(prefix_dot) :]
+                # Only include direct children (not further nested)
+                if "." not in relative:
+                    result[relative] = info
+        return result
+
+    def _collect_base_fields(self) -> dict[str, dict[str, Any]]:
+        """Collect fields that belong in the base class."""
+        base_fields: dict[str, dict[str, Any]] = {}
+
+        # From base_class (present in all types, same datatype)
+        for field, info in self.cross_type.get("base_class", {}).items():
+            python_type = self._compute_python_type(info["global_types"], is_required=True)
+            base_fields[field] = {
+                "python_type": python_type,
+                "is_required": True,
+                "source": "base_class",
+            }
+
+        # From base_class_with_variance (present in all types, varying datatype)
+        for field, info in self.cross_type.get("base_class_with_variance", {}).items():
+            python_type = self._compute_python_type(info["global_types"], is_required=True)
+            base_fields[field] = {
+                "python_type": python_type,
+                "is_required": True,
+                "source": "base_class_with_variance",
+            }
+
+        return base_fields
+
+    def _compute_python_type(
+        self, type_counts: dict[str, int], is_required: bool
+    ) -> str:
+        """Compute Python type from type counts."""
+        types = set(type_counts.keys())
+
+        # Handle null
+        has_null = "null" in types
+        types.discard("null")
+
+        # Normalize empty variants
+        if "str(empty)" in types:
+            types.discard("str(empty)")
+            types.add("str")
+        if "list(empty)" in types:
+            types.discard("list(empty)")
+            types.add("list")
+        if "dict(empty)" in types:
+            types.discard("dict(empty)")
+            types.add("dict")
+
+        if not types:
+            return "None"
+
+        type_mapping = {
+            "str": "str",
+            "int": "int",
+            "float": "Decimal",
+            "bool": "bool",
+            "list": "list[Any]",
+            "dict": "dict[str, Any]",
+        }
+
+        if len(types) == 1:
+            t = next(iter(types))
+            python_type = type_mapping.get(t, t)
+        elif types <= {"int", "float"}:
+            python_type = "Decimal"
+        else:
+            python_types = sorted(type_mapping.get(t, t) for t in types)
+            python_type = " | ".join(python_types)
+
+        # Add None if nullable or not required
+        needs_none = has_null or not is_required
+        if needs_none:
+            return f"{python_type} | None"
+        return python_type
+
+    def _collect_type_specific_fields(
+        self, tx_type: str, base_fields: dict[str, dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
+        """Collect fields specific to a transaction type (not in base)."""
+        type_coverage = self.within_type_coverage.get(tx_type, {})
+        specific_fields: dict[str, dict[str, Any]] = {}
+
+        for field, info in type_coverage.items():
+            # Skip if in base class
+            if field in base_fields:
+                continue
+
+            # Skip absent fields
+            if info["status"] == "absent":
+                continue
+
+            specific_fields[field] = {
+                "python_type": info["python_type"],
+                "is_required": info["status"] == "required",
+                "coverage_pct": info["coverage_pct"],
+            }
+
+        return specific_fields
+
+    def generate_pydantic_models(self) -> str:
+        """Generate Pydantic model code."""
+        lines: list[str] = []
+
+        # Header and imports
+        lines.append('"""Auto-generated transaction models from API analysis."""')
+        lines.append("")
+        lines.append("from decimal import Decimal")
+        lines.append("from typing import Annotated, Any, Literal, Union")
+        lines.append("")
+        lines.append("from pydantic import BaseModel, Field")
+        lines.append("from pydantic.functional_validators import Tag")
+        lines.append("from pydantic import Discriminator")
+        lines.append("")
+        lines.append("")
+
+        # TransactionType enum
+        lines.append("class TransactionType:")
+        lines.append('    """Known transaction type values from E*Trade API."""')
+        lines.append("")
+        for tx_type in self.type_names:
+            enum_name = self._sanitize_enum_name(tx_type)
+            lines.append(f'    {enum_name} = "{tx_type}"')
+        lines.append("")
+        lines.append("")
+
+        # Collect base class fields
+        base_fields = self._collect_base_fields()
+
+        # Generate nested models first (Product, Brokerage)
+        lines.extend(self._generate_pydantic_nested_models(base_fields))
+
+        # Generate TransactionBase
+        lines.extend(self._generate_pydantic_base_class(base_fields))
+
+        # Generate subclasses for each transaction type
+        for tx_type in self.type_names:
+            lines.extend(
+                self._generate_pydantic_subclass(tx_type, base_fields)
+            )
+
+        # Generate discriminated union
+        lines.extend(self._generate_pydantic_union())
+
+        return "\n".join(lines)
+
+    def _generate_pydantic_nested_models(
+        self, base_fields: dict[str, dict[str, Any]]
+    ) -> list[str]:
+        """Generate nested Pydantic models (Product, Brokerage)."""
+        lines: list[str] = []
+
+        # Collect product fields from all types
+        all_product_fields: dict[str, dict[str, Any]] = {}
+        for tx_type in self.type_names:
+            type_coverage = self.within_type_coverage.get(tx_type, {})
+            for field, info in type_coverage.items():
+                if field.startswith("brokerage.product.") and info["status"] != "absent":
+                    rel_field = field.replace("brokerage.product.", "")
+                    # Only direct children, not already seen
+                    if "." not in rel_field and rel_field not in all_product_fields:
+                        all_product_fields[rel_field] = info
+
+        # Generate Product model if needed
+        if all_product_fields:
+            lines.append("class Product(BaseModel):")
+            lines.append('    """Product information within a brokerage transaction."""')
+            lines.append("")
+            for field, info in sorted(all_product_fields.items()):
+                python_type = info.get("python_type", "Any")
+                # All product fields are optional since not all types have them
+                if "| None" not in python_type and python_type != "None":
+                    python_type = f"{python_type} | None"
+                lines.append(f"    {field}: {python_type} = None")
+            lines.append("")
+            lines.append("")
+
+        # Collect brokerage fields (exclude 'product' if we have Product model)
+        brokerage_fields = self._get_nested_fields(base_fields, "brokerage")
+
+        # Generate Brokerage model
+        lines.append("class Brokerage(BaseModel):")
+        lines.append('    """Brokerage-specific transaction details."""')
+        lines.append("")
+
+        for field, info in sorted(brokerage_fields.items()):
+            # Skip raw product dict if we're using the Product model
+            if field == "product" and all_product_fields:
+                continue
+
+            python_type = info.get("python_type", "Any")
+            if info.get("is_required", True):
+                lines.append(f"    {field}: {python_type}")
+            else:
+                if "| None" not in python_type:
+                    python_type = f"{python_type} | None"
+                lines.append(f"    {field}: {python_type} = None")
+
+        # Add typed product field if we have product fields
+        if all_product_fields:
+            lines.append("    product: Product | None = None")
+
+        lines.append("")
+        lines.append("")
+
+        return lines
+
+    def _generate_pydantic_base_class(
+        self, base_fields: dict[str, dict[str, Any]]
+    ) -> list[str]:
+        """Generate Pydantic base class."""
+        lines: list[str] = []
+
+        lines.append("class TransactionBase(BaseModel):")
+        lines.append('    """Base class for all transaction types."""')
+        lines.append("")
+
+        # Add top-level fields (exclude nested ones)
+        top_level = self._get_top_level_fields(base_fields)
+
+        for field, info in sorted(top_level.items()):
+            python_type = info.get("python_type", "Any")
+
+            # Special handling for brokerage - use nested model
+            if field == "brokerage":
+                lines.append("    brokerage: Brokerage")
+                continue
+
+            # Use Field with alias for camelCase fields
+            snake_field = self._to_snake_case(field)
+            if snake_field != field:
+                lines.append(
+                    f'    {snake_field}: {python_type} = Field(alias="{field}")'
+                )
+            else:
+                lines.append(f"    {field}: {python_type}")
+
+        lines.append("")
+        lines.append("    @property")
+        lines.append("    def is_pending(self) -> bool:")
+        lines.append('        """Check if transaction is pending (post_date is epoch)."""')
+        lines.append("        return self.post_date == 0 if hasattr(self, 'post_date') else False")
+        lines.append("")
+        lines.append("")
+
+        return lines
+
+    def _generate_pydantic_subclass(
+        self, tx_type: str, base_fields: dict[str, dict[str, Any]]
+    ) -> list[str]:
+        """Generate Pydantic subclass for a transaction type."""
+        lines: list[str] = []
+
+        class_name = self._sanitize_class_name(tx_type)
+        specific_fields = self._collect_type_specific_fields(tx_type, base_fields)
+        top_level_specific = self._get_top_level_fields(specific_fields)
+
+        lines.append(f"class {class_name}(TransactionBase):")
+        lines.append(f'    """Transaction type: {tx_type}"""')
+        lines.append("")
+
+        # Add literal type for discriminator
+        lines.append(f'    transaction_type: Literal["{tx_type}"] = Field(')
+        lines.append(f'        default="{tx_type}", alias="transactionType"')
+        lines.append("    )")
+
+        # Add type-specific fields
+        if top_level_specific:
+            lines.append("")
+            for field, info in sorted(top_level_specific.items()):
+                python_type = info.get("python_type", "Any")
+                snake_field = self._to_snake_case(field)
+
+                is_required = info.get("is_required", False)
+                if is_required:
+                    if snake_field != field:
+                        lines.append(
+                            f'    {snake_field}: {python_type} = Field(alias="{field}")'
+                        )
+                    else:
+                        lines.append(f"    {field}: {python_type}")
+                else:
+                    if "| None" not in python_type:
+                        python_type = f"{python_type} | None"
+                    if snake_field != field:
+                        lines.append(
+                            f'    {snake_field}: {python_type} = Field(default=None, alias="{field}")'
+                        )
+                    else:
+                        lines.append(f"    {field}: {python_type} = None")
+
+        if not top_level_specific:
+            lines.append("    pass")
+
+        lines.append("")
+        lines.append("")
+
+        return lines
+
+    def _generate_pydantic_union(self) -> list[str]:
+        """Generate discriminated union type for all transaction types."""
+        lines: list[str] = []
+
+        lines.append("# Discriminated union of all transaction types")
+        lines.append("Transaction = Annotated[")
+        lines.append("    Union[")
+
+        for tx_type in self.type_names:
+            class_name = self._sanitize_class_name(tx_type)
+            lines.append(f'        Annotated[{class_name}, Tag("{tx_type}")],')
+
+        lines.append("    ],")
+        lines.append('    Discriminator("transaction_type"),')
+        lines.append("]")
+        lines.append("")
+
+        return lines
+
+    def generate_dataclass_models(self) -> str:
+        """Generate dataclass model code."""
+        lines: list[str] = []
+
+        # Header and imports
+        lines.append('"""Auto-generated transaction models from API analysis."""')
+        lines.append("")
+        lines.append("from dataclasses import dataclass, field")
+        lines.append("from decimal import Decimal")
+        lines.append("from typing import Any, Literal, Union")
+        lines.append("")
+        lines.append("")
+
+        # TransactionType constants
+        lines.append("class TransactionType:")
+        lines.append('    """Known transaction type values from E*Trade API."""')
+        lines.append("")
+        for tx_type in self.type_names:
+            enum_name = self._sanitize_enum_name(tx_type)
+            lines.append(f'    {enum_name} = "{tx_type}"')
+        lines.append("")
+        lines.append("")
+
+        # Collect base class fields
+        base_fields = self._collect_base_fields()
+
+        # Generate nested dataclasses
+        lines.extend(self._generate_dataclass_nested_models(base_fields))
+
+        # Generate base dataclass
+        lines.extend(self._generate_dataclass_base(base_fields))
+
+        # Generate subclasses
+        for tx_type in self.type_names:
+            lines.extend(self._generate_dataclass_subclass(tx_type, base_fields))
+
+        # Generate union type alias
+        lines.extend(self._generate_dataclass_union())
+
+        return "\n".join(lines)
+
+    def _generate_dataclass_nested_models(
+        self, base_fields: dict[str, dict[str, Any]]
+    ) -> list[str]:
+        """Generate nested dataclass models."""
+        lines: list[str] = []
+
+        # Collect product fields from all types
+        all_product_fields: dict[str, dict[str, Any]] = {}
+        for tx_type in self.type_names:
+            type_coverage = self.within_type_coverage.get(tx_type, {})
+            for fld, info in type_coverage.items():
+                if fld.startswith("brokerage.product.") and info["status"] != "absent":
+                    rel_field = fld.replace("brokerage.product.", "")
+                    # Only direct children, not already seen
+                    if "." not in rel_field and rel_field not in all_product_fields:
+                        all_product_fields[rel_field] = info
+
+        # Generate Product dataclass
+        if all_product_fields:
+            lines.append("@dataclass")
+            lines.append("class Product:")
+            lines.append('    """Product information within a brokerage transaction."""')
+            lines.append("")
+            for fld, info in sorted(all_product_fields.items()):
+                python_type = info.get("python_type", "Any")
+                if "| None" not in python_type and python_type != "None":
+                    python_type = f"{python_type} | None"
+                lines.append(f"    {fld}: {python_type} = None")
+            lines.append("")
+            lines.append("")
+
+        # Collect brokerage fields (exclude 'product' if we have Product model)
+        brokerage_fields = self._get_nested_fields(base_fields, "brokerage")
+
+        lines.append("@dataclass")
+        lines.append("class Brokerage:")
+        lines.append('    """Brokerage-specific transaction details."""')
+        lines.append("")
+
+        # Required fields first
+        for fld, info in sorted(brokerage_fields.items()):
+            # Skip raw product dict if we're using the Product model
+            if fld == "product" and all_product_fields:
+                continue
+            if info.get("is_required", True):
+                python_type = info.get("python_type", "Any")
+                lines.append(f"    {fld}: {python_type}")
+
+        # Optional fields with defaults
+        for fld, info in sorted(brokerage_fields.items()):
+            # Skip raw product dict if we're using the Product model
+            if fld == "product" and all_product_fields:
+                continue
+            if not info.get("is_required", True):
+                python_type = info.get("python_type", "Any")
+                if "| None" not in python_type:
+                    python_type = f"{python_type} | None"
+                lines.append(f"    {fld}: {python_type} = None")
+
+        # Add typed product field at the end (with default)
+        if all_product_fields:
+            lines.append("    product: Product | None = None")
+
+        lines.append("")
+        lines.append("")
+
+        return lines
+
+    def _generate_dataclass_base(
+        self, base_fields: dict[str, dict[str, Any]]
+    ) -> list[str]:
+        """Generate base dataclass."""
+        lines: list[str] = []
+
+        lines.append("@dataclass")
+        lines.append("class TransactionBase:")
+        lines.append('    """Base class for all transaction types."""')
+        lines.append("")
+
+        top_level = self._get_top_level_fields(base_fields)
+
+        # Required fields first
+        for fld, info in sorted(top_level.items()):
+            if info.get("is_required", True):
+                python_type = info.get("python_type", "Any")
+                if fld == "brokerage":
+                    lines.append("    brokerage: Brokerage")
+                else:
+                    snake = self._to_snake_case(fld)
+                    lines.append(f"    {snake}: {python_type}")
+
+        # Optional fields with defaults
+        for fld, info in sorted(top_level.items()):
+            if not info.get("is_required", True):
+                python_type = info.get("python_type", "Any")
+                if "| None" not in python_type:
+                    python_type = f"{python_type} | None"
+                snake = self._to_snake_case(fld)
+                lines.append(f"    {snake}: {python_type} = None")
+
+        lines.append("")
+        lines.append("    @property")
+        lines.append("    def is_pending(self) -> bool:")
+        lines.append('        """Check if transaction is pending."""')
+        lines.append("        return self.post_date == 0 if hasattr(self, 'post_date') else False")
+        lines.append("")
+        lines.append("")
+
+        return lines
+
+    def _generate_dataclass_subclass(
+        self, tx_type: str, base_fields: dict[str, dict[str, Any]]
+    ) -> list[str]:
+        """Generate dataclass subclass for a transaction type."""
+        lines: list[str] = []
+
+        class_name = self._sanitize_class_name(tx_type)
+        specific_fields = self._collect_type_specific_fields(tx_type, base_fields)
+        top_level_specific = self._get_top_level_fields(specific_fields)
+
+        lines.append("@dataclass")
+        lines.append(f"class {class_name}(TransactionBase):")
+        lines.append(f'    """Transaction type: {tx_type}"""')
+        lines.append("")
+
+        # Discriminator field
+        lines.append(f'    transaction_type: Literal["{tx_type}"] = "{tx_type}"')
+
+        # Required type-specific fields first
+        required_fields = [
+            (f, i) for f, i in sorted(top_level_specific.items()) if i.get("is_required")
+        ]
+        for fld, info in required_fields:
+            python_type = info.get("python_type", "Any")
+            snake = self._to_snake_case(fld)
+            lines.append(f"    {snake}: {python_type} = field(default=None)  # type: ignore")
+
+        # Optional fields
+        optional_fields = [
+            (f, i) for f, i in sorted(top_level_specific.items()) if not i.get("is_required")
+        ]
+        for fld, info in optional_fields:
+            python_type = info.get("python_type", "Any")
+            if "| None" not in python_type:
+                python_type = f"{python_type} | None"
+            snake = self._to_snake_case(fld)
+            lines.append(f"    {snake}: {python_type} = None")
+
+        if not required_fields and not optional_fields:
+            lines.append("    pass")
+
+        lines.append("")
+        lines.append("")
+
+        return lines
+
+    def _generate_dataclass_union(self) -> list[str]:
+        """Generate union type alias for dataclasses."""
+        lines: list[str] = []
+
+        class_names = [self._sanitize_class_name(t) for t in self.type_names]
+        lines.append("# Union type of all transaction types")
+        lines.append("Transaction = Union[")
+        for name in class_names:
+            lines.append(f"    {name},")
+        lines.append("]")
+        lines.append("")
+
+        return lines
+
+    def _to_snake_case(self, name: str) -> str:
+        """Convert camelCase to snake_case."""
+        result = []
+        prev_was_upper = False
+        for i, char in enumerate(name):
+            if char.isupper():
+                # Add underscore before uppercase if:
+                # - Not at start
+                # - Previous char wasn't uppercase (avoid URI -> u_r_i)
+                # - OR next char is lowercase (handle XMLParser -> xml_parser)
+                if (i > 0 and not prev_was_upper) or (
+                    i > 0
+                    and prev_was_upper
+                    and i + 1 < len(name)
+                    and name[i + 1].islower()
+                ):
+                    result.append("_")
+                result.append(char.lower())
+                prev_was_upper = True
+            else:
+                result.append(char)
+                prev_was_upper = False
+        return "".join(result)
+
+
 @app.command("analyze-transactions")
 def analyze_transactions(
     data_dir: Path = typer.Option(
@@ -1146,6 +1759,22 @@ def analyze_transactions(
         "-o",
         help="Save full analysis results to JSON file.",
     ),
+    generate_models: bool = typer.Option(
+        False,
+        "--generate-models",
+        "-g",
+        help="Generate recommended Python model code from analysis.",
+    ),
+    model_format: str = typer.Option(
+        "pydantic",
+        "--model-format",
+        help="Model format: 'pydantic' or 'dataclass'.",
+    ),
+    output_models: Path | None = typer.Option(
+        None,
+        "--output-models",
+        help="Save generated models to a Python file.",
+    ),
 ) -> None:
     """Analyze collected transactions for model design.
 
@@ -1168,6 +1797,12 @@ def analyze_transactions(
 
         # Save complete analysis to JSON
         etrade-cli dev analyze-transactions -o analysis.json
+
+        # Generate Pydantic models
+        etrade-cli dev analyze-transactions --generate-models
+
+        # Generate and save dataclass models to file
+        etrade-cli dev analyze-transactions -g --model-format dataclass --output-models models.py
     """
     manifest_path = data_dir / "manifest.json"
 
@@ -1399,3 +2034,36 @@ def analyze_transactions(
 
         output_json.write_text(json.dumps(results, indent=2))
         print_success(f"\nFull analysis saved to {output_json}")
+
+    # === Generate Models ===
+    if generate_models or output_models:
+        # Build type counts for the generator
+        type_counts = {tx_type: len(txs) for tx_type, txs in by_type.items()}
+
+        generator = ModelGenerator(
+            cross_type=cross_type,
+            within_type_coverage=within_type_coverage,
+            type_counts=type_counts,
+        )
+
+        # Validate format
+        if model_format not in ("pydantic", "dataclass"):
+            print_error(f"Unknown model format: {model_format}")
+            print("Supported formats: pydantic, dataclass")
+            raise typer.Exit(1)
+
+        # Generate code
+        if model_format == "pydantic":
+            model_code = generator.generate_pydantic_models()
+        else:
+            model_code = generator.generate_dataclass_models()
+
+        # Output
+        if output_models:
+            output_models.write_text(model_code)
+            print_success(f"\nGenerated {model_format} models saved to {output_models}")
+        else:
+            print("\n" + "=" * 60)
+            print(f"GENERATED {model_format.upper()} MODELS")
+            print("=" * 60)
+            print(model_code)
