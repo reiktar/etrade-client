@@ -588,6 +588,255 @@ class TransactionAnalyzer:
         return always, sometimes, never
 
 
+class FieldTypeAnalyzer:
+    """Analyzes field types and coverage for model design decisions."""
+
+    def __init__(
+        self,
+        transactions: list[dict[str, Any]],
+        by_type: dict[str, list[dict[str, Any]]],
+    ) -> None:
+        self.transactions = transactions
+        self.by_type = by_type
+        self.total_count = len(transactions)
+        self.type_names = sorted(by_type.keys())
+        self.num_types = len(self.type_names)
+
+    def get_json_type(self, value: Any) -> str:
+        """Get JSON-compatible type name for a value."""
+        if value is None:
+            return "null"
+        elif isinstance(value, bool):  # Must check before int (bool is subclass of int)
+            return "bool"
+        elif isinstance(value, int):
+            return "int"
+        elif isinstance(value, float):
+            return "float"
+        elif isinstance(value, str):
+            return "str" if value else "str(empty)"
+        elif isinstance(value, list):
+            return "list" if value else "list(empty)"
+        elif isinstance(value, dict):
+            return "dict" if value else "dict(empty)"
+        else:
+            return type(value).__name__
+
+    def extract_field_types(
+        self, obj: dict[str, Any], prefix: str = ""
+    ) -> dict[str, str]:
+        """Extract all field paths and their types from an object."""
+        result: dict[str, str] = {}
+        for key, value in obj.items():
+            path = f"{prefix}.{key}" if prefix else key
+            result[path] = self.get_json_type(value)
+
+            # Recurse into non-empty dicts
+            if isinstance(value, dict) and value:
+                result.update(self.extract_field_types(value, path))
+
+        return result
+
+    def analyze_global(self) -> dict[str, dict[str, int]]:
+        """Analyze field types across all transactions.
+
+        Returns: {field_path: {type: count}}
+        """
+        field_types: dict[str, dict[str, int]] = {}
+
+        for tx in self.transactions:
+            for field, ftype in self.extract_field_types(tx).items():
+                if field not in field_types:
+                    field_types[field] = {}
+                field_types[field][ftype] = field_types[field].get(ftype, 0) + 1
+
+        return field_types
+
+    def analyze_per_type(self) -> dict[str, dict[str, dict[str, int]]]:
+        """Analyze field types per transaction type.
+
+        Returns: {tx_type: {field_path: {type: count}}}
+        """
+        result: dict[str, dict[str, dict[str, int]]] = {}
+
+        for tx_type, txs in self.by_type.items():
+            field_types: dict[str, dict[str, int]] = {}
+            for tx in txs:
+                for field, ftype in self.extract_field_types(tx).items():
+                    if field not in field_types:
+                        field_types[field] = {}
+                    field_types[field][ftype] = field_types[field].get(ftype, 0) + 1
+            result[tx_type] = field_types
+
+        return result
+
+    def get_dominant_type(self, type_counts: dict[str, int]) -> str:
+        """Get the most common type from counts, preferring non-null."""
+        # Filter out null for dominance check if there are other types
+        non_null = {t: c for t, c in type_counts.items() if t != "null"}
+        if non_null:
+            return max(non_null.keys(), key=lambda t: non_null[t])
+        return max(type_counts.keys(), key=lambda t: type_counts[t])
+
+    def analyze_cross_type_coverage(
+        self,
+        global_analysis: dict[str, dict[str, int]],
+        per_type_analysis: dict[str, dict[str, dict[str, int]]],
+    ) -> dict[str, Any]:
+        """Analyze field coverage across transaction types.
+
+        Categorizes fields into:
+        - base_class: present in ALL types with same datatype (100% coverage)
+        - base_class_with_variance: present in ALL types but different datatypes
+        - subclass_specific: present in SOME types only
+        - type_variance: fields with multiple datatypes (needs attention)
+        """
+        all_type_names = set(self.type_names)
+
+        base_class: dict[str, Any] = {}
+        base_class_with_variance: dict[str, Any] = {}
+        subclass_specific: dict[str, Any] = {}
+        type_variance: dict[str, Any] = {}
+
+        for field, type_counts in sorted(global_analysis.items()):
+            total_present = sum(type_counts.values())
+            coverage_pct = (total_present / self.total_count) * 100
+
+            # Which transaction types have this field?
+            types_with_field: set[str] = set()
+            type_info: dict[str, dict[str, int]] = {}
+
+            for tx_type in self.type_names:
+                if field in per_type_analysis.get(tx_type, {}):
+                    types_with_field.add(tx_type)
+                    type_info[tx_type] = per_type_analysis[tx_type][field]
+
+            types_present = len(types_with_field)
+            type_coverage_pct = (types_present / self.num_types) * 100
+
+            # Check for datatype variance
+            all_types_found = list(type_counts.keys())
+            has_variance = len(all_types_found) > 1
+
+            # Get dominant type per transaction type
+            dominant_per_tx_type: dict[str, str] = {}
+            for tx_type, counts in type_info.items():
+                dominant_per_tx_type[tx_type] = self.get_dominant_type(counts)
+
+            unique_dominants = set(dominant_per_tx_type.values())
+            same_type_across_all = len(unique_dominants) == 1
+
+            field_info = {
+                "global_types": type_counts,
+                "coverage_pct": round(coverage_pct, 1),
+                "type_coverage": f"{types_present}/{self.num_types}",
+                "type_coverage_pct": round(type_coverage_pct, 1),
+                "types_with_field": sorted(types_with_field),
+                "dominant_type": self.get_dominant_type(type_counts),
+            }
+
+            if has_variance:
+                field_info["has_variance"] = True
+                field_info["dominant_per_tx_type"] = dominant_per_tx_type
+                type_variance[field] = field_info.copy()
+
+            # Categorize based on type coverage
+            if types_with_field == all_type_names:
+                # Present in ALL transaction types
+                if same_type_across_all and not has_variance:
+                    base_class[field] = field_info
+                else:
+                    field_info["dominant_per_tx_type"] = dominant_per_tx_type
+                    base_class_with_variance[field] = field_info
+            else:
+                # Present in SOME transaction types
+                field_info["missing_from"] = sorted(all_type_names - types_with_field)
+                subclass_specific[field] = field_info
+
+        return {
+            "base_class": base_class,
+            "base_class_with_variance": base_class_with_variance,
+            "subclass_specific": subclass_specific,
+            "type_variance": type_variance,
+        }
+
+    def generate_field_matrix(
+        self, per_type_analysis: dict[str, dict[str, dict[str, int]]]
+    ) -> list[dict[str, Any]]:
+        """Generate a field presence matrix across all transaction types.
+
+        Returns list of rows: [{field, type1, type2, ..., total_types}]
+        """
+        # Collect all fields
+        all_fields: set[str] = set()
+        for fields in per_type_analysis.values():
+            all_fields.update(fields.keys())
+
+        rows: list[dict[str, Any]] = []
+        for field in sorted(all_fields):
+            row: dict[str, Any] = {"field": field}
+            types_present = 0
+
+            for tx_type in self.type_names:
+                if field in per_type_analysis.get(tx_type, {}):
+                    type_counts = per_type_analysis[tx_type][field]
+                    dominant = self.get_dominant_type(type_counts)
+                    total = sum(type_counts.values())
+                    row[tx_type] = f"{dominant}({total})"
+                    types_present += 1
+                else:
+                    row[tx_type] = "-"
+
+            row["total_types"] = f"{types_present}/{self.num_types}"
+            rows.append(row)
+
+        return rows
+
+    def get_recommended_python_type(self, type_counts: dict[str, int]) -> str:
+        """Recommend a Python type annotation based on observed types."""
+        types = set(type_counts.keys())
+
+        # Remove null - we'll handle optionality separately
+        has_null = "null" in types
+        types.discard("null")
+
+        # Handle empty variants
+        types.discard("str(empty)")
+        types.discard("list(empty)")
+        types.discard("dict(empty)")
+        if "str(empty)" in type_counts:
+            types.add("str")
+        if "list(empty)" in type_counts:
+            types.add("list")
+        if "dict(empty)" in type_counts:
+            types.add("dict")
+
+        if not types:
+            return "None"
+
+        # Single type
+        if len(types) == 1:
+            t = next(iter(types))
+            mapping = {
+                "str": "str",
+                "int": "int",
+                "float": "Decimal",  # Financial data should use Decimal
+                "bool": "bool",
+                "list": "list[Any]",
+                "dict": "dict[str, Any]",
+            }
+            base = mapping.get(t, t)
+            return f"{base} | None" if has_null else base
+
+        # Mixed numeric - prefer Decimal for financial accuracy
+        if types <= {"int", "float"}:
+            return "Decimal | None" if has_null else "Decimal"
+
+        # Mixed types - use union
+        type_strs = sorted(types)
+        base = " | ".join(type_strs)
+        return f"{base} | None" if has_null else base
+
+
 @app.command("analyze-transactions")
 def analyze_transactions(
     data_dir: Path = typer.Option(
@@ -596,33 +845,55 @@ def analyze_transactions(
         "-d",
         help="Data directory containing collected transactions.",
     ),
-    show_fields: bool = typer.Option(
+    show_base_class: bool = typer.Option(
+        True,
+        "--show-base-class/--no-base-class",
+        help="Show base class candidate fields (100% coverage, same type).",
+    ),
+    show_variance: bool = typer.Option(
+        True,
+        "--show-variance/--no-variance",
+        help="Show fields with datatype variance.",
+    ),
+    show_subclass: bool = typer.Option(
         False,
-        "--show-fields",
-        "-f",
-        help="Show field presence analysis for each type.",
+        "--show-subclass",
+        "-s",
+        help="Show subclass-specific fields (not in all types).",
+    ),
+    show_matrix: bool = typer.Option(
+        False,
+        "--show-matrix",
+        "-m",
+        help="Show field presence matrix across all types.",
     ),
     output_json: Path | None = typer.Option(
         None,
         "--output-json",
         "-o",
-        help="Save analysis results to JSON file.",
+        help="Save full analysis results to JSON file.",
     ),
 ) -> None:
-    """Analyze collected transactions to discover types and field patterns.
+    """Analyze collected transactions for model design.
 
-    Reads all collected raw transaction data and produces:
-    - Transaction type distribution (count per type)
-    - Field presence analysis per type (always/sometimes/never present)
+    Performs comprehensive field and datatype analysis:
+    - Transaction type distribution
+    - Field coverage analysis (which fields in which types)
+    - Datatype analysis (detect type variance)
+    - Base class candidates (fields in ALL types with same datatype)
+    - Subclass-specific fields (fields in SOME types only)
 
     Examples:
-        # Basic type distribution
+        # Full analysis for model design
         etrade-cli dev analyze-transactions
 
-        # Include field analysis
-        etrade-cli dev analyze-transactions --show-fields
+        # Include field matrix across types
+        etrade-cli dev analyze-transactions --show-matrix
 
-        # Save to JSON for further processing
+        # Show subclass-specific fields
+        etrade-cli dev analyze-transactions --show-subclass
+
+        # Save complete analysis to JSON
         etrade-cli dev analyze-transactions -o analysis.json
     """
     manifest_path = data_dir / "manifest.json"
@@ -632,21 +903,32 @@ def analyze_transactions(
         print("Run 'etrade-cli dev collect-transactions' first.")
         raise typer.Exit(1)
 
-    analyzer = TransactionAnalyzer(data_dir)
+    loader = TransactionAnalyzer(data_dir)
 
     print("\nLoading transactions...")
-    transactions = analyzer.load_all_transactions()
+    transactions = loader.load_all_transactions()
 
     if not transactions:
         print_error("No transactions found in collected data.")
         raise typer.Exit(1)
 
-    print(f"Loaded {len(transactions)} transactions\n")
+    # Group by type
+    by_type = loader.analyze_types(transactions)
 
-    # Analyze by type
-    by_type = analyzer.analyze_types(transactions)
+    print(f"Loaded {len(transactions)} transactions across {len(by_type)} types\n")
 
-    print("=== Transaction Type Distribution ===\n")
+    # Initialize the field type analyzer
+    analyzer = FieldTypeAnalyzer(transactions, by_type)
+
+    # Run analyses
+    global_analysis = analyzer.analyze_global()
+    per_type_analysis = analyzer.analyze_per_type()
+    cross_type = analyzer.analyze_cross_type_coverage(global_analysis, per_type_analysis)
+
+    # === Transaction Type Distribution ===
+    print("=" * 60)
+    print("TRANSACTION TYPE DISTRIBUTION")
+    print("=" * 60)
     type_summary: dict[str, Any] = {}
     for tx_type, txs in sorted(by_type.items(), key=lambda x: -len(x[1])):
         count = len(txs)
@@ -654,38 +936,125 @@ def analyze_transactions(
         print(f"  {tx_type}: {count} ({pct:.1f}%)")
         type_summary[tx_type] = {"count": count, "percentage": round(pct, 2)}
 
-    if show_fields:
-        print("\n=== Field Presence by Type ===")
+    # === Base Class Candidates ===
+    if show_base_class:
+        print("\n" + "=" * 60)
+        print("BASE CLASS CANDIDATES (present in ALL types, same datatype)")
+        print("=" * 60)
+        print("Fields that should go in TransactionBase:\n")
 
-        field_analysis: dict[str, Any] = {}
-        for tx_type, txs in sorted(by_type.items()):
-            print(f"\n{tx_type} ({len(txs)} transactions):")
+        base_fields = cross_type["base_class"]
+        if base_fields:
+            for field, info in sorted(base_fields.items()):
+                type_str = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {type_str} -> {python_type}")
+        else:
+            print("  (none found)")
 
-            field_stats = analyzer.analyze_fields(txs)
-            always, sometimes, never = analyzer.categorize_fields(field_stats, len(txs))
+        # Also show fields in all types but with variance
+        variance_in_all = cross_type["base_class_with_variance"]
+        if variance_in_all:
+            print("\n  --- With Type Variance (needs decision) ---")
+            for field, info in sorted(variance_in_all.items()):
+                types_str = ", ".join(
+                    f"{t}:{c}" for t, c in info["global_types"].items()
+                )
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: [{types_str}] -> {python_type}")
 
-            field_analysis[tx_type] = {
-                "always_present": always,
-                "sometimes_present": sometimes,
-                "never_present": never,
-            }
+    # === Type Variance ===
+    if show_variance:
+        variance = cross_type["type_variance"]
+        if variance:
+            print("\n" + "=" * 60)
+            print("FIELDS WITH DATATYPE VARIANCE")
+            print("=" * 60)
+            print("These fields have multiple datatypes across transactions:\n")
 
-            print("  Always present:")
-            for field in always:
-                print(f"    - {field}")
+            for field, info in sorted(variance.items()):
+                types_str = ", ".join(
+                    f"{t}:{c}" for t, c in info["global_types"].items()
+                )
+                coverage = info["coverage_pct"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}")
+                print(f"    Types: {types_str}")
+                print(f"    Coverage: {coverage}%")
+                print(f"    Recommended: {python_type}")
 
-            if sometimes:
-                print("  Sometimes present:")
-                for field in sometimes:
-                    print(f"    - {field}")
+    # === Subclass-Specific Fields ===
+    if show_subclass:
+        subclass = cross_type["subclass_specific"]
+        if subclass:
+            print("\n" + "=" * 60)
+            print("SUBCLASS-SPECIFIC FIELDS (not in all types)")
+            print("=" * 60)
 
+            for field, info in sorted(subclass.items()):
+                type_cov = info["type_coverage"]
+                types_in = ", ".join(info["types_with_field"][:5])
+                if len(info["types_with_field"]) > 5:
+                    types_in += "..."
+                dominant = info["dominant_type"]
+                python_type = analyzer.get_recommended_python_type(info["global_types"])
+                print(f"  {field}: {dominant} ({type_cov} types)")
+                print(f"    Present in: {types_in}")
+                print(f"    Recommended: {python_type}")
+
+    # === Field Matrix ===
+    if show_matrix:
+        print("\n" + "=" * 60)
+        print("FIELD PRESENCE MATRIX")
+        print("=" * 60)
+
+        matrix = analyzer.generate_field_matrix(per_type_analysis)
+
+        # Determine column widths
+        type_names = analyzer.type_names
+        field_width = max(len(r["field"]) for r in matrix) + 2
+        type_width = 12
+
+        # Header
+        header = "Field".ljust(field_width)
+        for tx_type in type_names:
+            # Abbreviate long type names
+            abbrev = tx_type[:10] if len(tx_type) > 10 else tx_type
+            header += abbrev.ljust(type_width)
+        header += "Coverage"
+        print(header)
+        print("-" * len(header))
+
+        # Rows
+        for row in matrix:
+            line = row["field"].ljust(field_width)
+            for tx_type in type_names:
+                val = row.get(tx_type, "-")
+                # Abbreviate type info
+                if val != "-":
+                    val = val[:10] if len(val) > 10 else val
+                line += val.ljust(type_width)
+            line += row["total_types"]
+            print(line)
+
+    # === Save to JSON ===
     if output_json:
         results = {
             "total_transactions": len(transactions),
+            "num_types": len(by_type),
             "type_distribution": type_summary,
+            "global_field_types": {
+                field: {
+                    "types": types,
+                    "recommended_python_type": analyzer.get_recommended_python_type(
+                        types
+                    ),
+                }
+                for field, types in global_analysis.items()
+            },
+            "cross_type_analysis": cross_type,
+            "per_type_analysis": per_type_analysis,
         }
-        if show_fields:
-            results["field_analysis"] = field_analysis
 
         output_json.write_text(json.dumps(results, indent=2))
-        print_success(f"\nAnalysis saved to {output_json}")
+        print_success(f"\nFull analysis saved to {output_json}")
