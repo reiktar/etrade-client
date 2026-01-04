@@ -3,17 +3,18 @@
 from typing import TYPE_CHECKING, Any
 
 from etrade_client.api.base import BaseAPI
-from etrade_client.api.types import (
-    ChainType,
-    ExpiryType,
-    OptionCategory,
-    OptionPriceType,
-    QuoteDetailFlag,
-)
 from etrade_client.models.market import OptionChain, OptionExpireDate, QuoteResponse
 
 if TYPE_CHECKING:
     from datetime import date
+
+    from etrade_client.api.types import (
+        ChainType,
+        ExpiryType,
+        OptionCategory,
+        OptionPriceType,
+        QuoteDetailFlag,
+    )
 
 
 class MarketAPI(BaseAPI):

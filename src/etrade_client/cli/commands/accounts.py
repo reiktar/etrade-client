@@ -11,6 +11,7 @@ from etrade_client.cli.async_runner import async_command
 from etrade_client.cli.client_factory import get_client
 from etrade_client.cli.config import CLIConfig, OutputFormat
 from etrade_client.cli.formatters import format_output, print_error
+from etrade_client.models.accounts import QuickViewPosition
 from etrade_client.models.transactions import (
     BoughtTransaction,
     DividendTransaction,
@@ -158,7 +159,7 @@ async def get_portfolio(
                 "symbol": pos.product.symbol if pos.product else "",
                 "qty": pos.quantity or 0,
                 "price": f"${pos.quick.last_trade:,.2f}"
-                if pos.quick and pos.quick.last_trade
+                if isinstance(pos, QuickViewPosition) and pos.quick.last_trade
                 else "N/A",
                 "value": f"${pos.market_value:,.2f}" if pos.market_value else "N/A",
                 "cost_basis": f"${pos.total_cost:,.2f}" if pos.total_cost else "N/A",

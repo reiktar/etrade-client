@@ -1,18 +1,21 @@
 """Accounts API endpoints."""
 
-from collections.abc import AsyncIterator
-from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from etrade_client.api.base import BaseAPI
-from etrade_client.api.types import MarketSession, PortfolioView, SortOrder
 from etrade_client.models.accounts import (
     AccountListResponse,
     BalanceResponse,
     PortfolioResponse,
 )
 from etrade_client.models.transactions import Transaction, TransactionListResponse
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+    from datetime import date
+
+    from etrade_client.api.types import MarketSession, PortfolioView, SortOrder
 
 # =============================================================================
 # SANDBOX RESPONSE NORMALIZATION

@@ -37,7 +37,7 @@ class TestRateLimitRetry:
         """Should retry when rate limit (429) is returned and succeed after."""
         call_count = 0
 
-        def mock_request(*args, **kwargs):
+        def mock_request(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             if call_count < 3:
@@ -58,7 +58,7 @@ class TestRateLimitRetry:
         """Should successfully retry when Retry-After header is provided."""
         call_count = 0
 
-        def mock_request(*args, **kwargs):
+        def mock_request(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -79,7 +79,7 @@ class TestRateLimitRetry:
         """Should retry using exponential backoff when no Retry-After header."""
         call_count = 0
 
-        def mock_request(*args, **kwargs):
+        def mock_request(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             if call_count < 3:
@@ -100,7 +100,7 @@ class TestRateLimitRetry:
         """Should raise ETradeRateLimitError after max retries exhausted."""
         call_count = 0
 
-        def always_rate_limit(*args, **kwargs):
+        def always_rate_limit(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             return make_response(429)
@@ -119,7 +119,7 @@ class TestRateLimitRetry:
         """Should not retry on non-rate-limit errors."""
         call_count = 0
 
-        def mock_request(*args, **kwargs):
+        def mock_request(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             return make_response(500, {"Error": {"message": "Server error"}})
@@ -138,7 +138,7 @@ class TestRateLimitRetry:
         """Should not retry on 401 authentication errors."""
         call_count = 0
 
-        def mock_request(*args, **kwargs):
+        def mock_request(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             return make_response(401, {"Error": {"message": "Unauthorized"}})

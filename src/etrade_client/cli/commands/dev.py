@@ -910,20 +910,22 @@ async def collect_transactions(
                     }
                     manifest["collections"].append(collection)
 
-                collection["date_ranges"].append(
-                    {
-                        "start_date": parsed_start.isoformat(),
-                        "end_date": parsed_end.isoformat(),
-                        "collected_at": datetime.now().isoformat(),
-                        "page_count": summary["total_pages"],
-                        "transaction_count": summary["total_transactions"],
-                        "path": str(
-                            Path(environment)
-                            / f"account_{acc.account_id_key}"
-                            / f"{parsed_start.isoformat()}_{parsed_end.isoformat()}"
-                        ),
-                    }
-                )
+                date_ranges = collection.get("date_ranges")
+                if isinstance(date_ranges, list):
+                    date_ranges.append(
+                        {
+                            "start_date": parsed_start.isoformat(),
+                            "end_date": parsed_end.isoformat(),
+                            "collected_at": datetime.now().isoformat(),
+                            "page_count": summary["total_pages"],
+                            "transaction_count": summary["total_transactions"],
+                            "path": str(
+                                Path(environment)
+                                / f"account_{acc.account_id_key}"
+                                / f"{parsed_start.isoformat()}_{parsed_end.isoformat()}"
+                            ),
+                        }
+                    )
 
             except Exception as e:
                 print_error(f"  Failed to collect: {e}")

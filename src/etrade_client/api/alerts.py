@@ -1,7 +1,6 @@
 """Alerts API endpoints."""
 
-from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.alerts import (
@@ -10,6 +9,9 @@ from etrade_client.models.alerts import (
     AlertListResponse,
     DeleteAlertsResponse,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 class AlertsAPI(BaseAPI):
@@ -121,9 +123,7 @@ class AlertsAPI(BaseAPI):
             search=search,
         )
 
-        yielded = 0
-        for alert in response.alerts:
+        for yielded, alert in enumerate(response.alerts):
             if limit is not None and yielded >= limit:
                 return
             yield alert
-            yielded += 1

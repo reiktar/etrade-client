@@ -130,9 +130,7 @@ async def list_transactions(
         ):
             # Filter by symbol if specified
             if symbol:
-                tx_symbol = (
-                    tx.brokerage.product.symbol if tx.brokerage and tx.brokerage.product else None
-                )
+                tx_symbol = tx.symbol
                 if not tx_symbol or tx_symbol.upper() != symbol.upper():
                     continue
 
