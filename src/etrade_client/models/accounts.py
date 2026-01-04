@@ -300,10 +300,13 @@ class CompleteQuote(BaseModel):
     ask_size: int = Field(alias="askSize")
 
     # Performance metrics
-    perform_1_month: int = Field(alias="perform1Month")
-    perform_3_month: int = Field(alias="perform3Month")
-    perform_6_month: int = Field(alias="perform6Month")
-    perform_12_month: int = Field(alias="perform12Month")
+    # These fields are absent for newly-listed securities that haven't
+    # traded for the corresponding time period (e.g., an ETF < 6 months old
+    # won't have perform6Month or perform12Month data)
+    perform_1_month: int | None = Field(default=None, alias="perform1Month")
+    perform_3_month: int | None = Field(default=None, alias="perform3Month")
+    perform_6_month: int | None = Field(default=None, alias="perform6Month")
+    perform_12_month: int | None = Field(default=None, alias="perform12Month")
 
     # Volatility/Statistical data
     beta: Decimal
