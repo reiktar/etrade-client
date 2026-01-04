@@ -500,7 +500,157 @@ etrade-cli market options-chain AAPL 2025-01-17 --type CALL --strikes 5
 
 ## orders - Order Management
 
-List and cancel orders.
+Place, preview, list, and cancel orders.
+
+### orders place-equity
+
+Place an equity (stock) order with confirmation.
+
+```bash
+etrade-cli orders place-equity ACCOUNT_ID SYMBOL [OPTIONS]
+
+Arguments:
+  ACCOUNT_ID  Account ID key
+  SYMBOL      Stock symbol (e.g., AAPL)
+
+Action Options (exactly one required):
+  --buy INT           Buy quantity
+  --sell INT          Sell quantity
+  --sell-short INT    Short sell quantity
+  --buy-to-cover INT  Buy to cover quantity
+
+Price Options (default: market order):
+  --limit FLOAT       Limit price
+  --stop FLOAT        Stop price
+  (use both for stop-limit)
+
+Term Options (default: good for day):
+  --gtc               Good until cancel
+  --ioc               Immediate or cancel
+  --fok               Fill or kill
+
+Other Options:
+  --extended          Extended hours session
+  --all-or-none       All or none flag
+  --yes, -y           Skip confirmation prompt
+```
+
+**Examples:**
+```bash
+# Buy 100 shares at market
+etrade-cli orders place-equity abc123 AAPL --buy 100
+
+# Sell with limit price, good until cancel
+etrade-cli orders place-equity abc123 AAPL --sell 50 --limit 150.00 --gtc
+
+# Stop-limit order
+etrade-cli orders place-equity abc123 AAPL --sell 100 --stop 145.00 --limit 144.00
+
+# Non-interactive (for scripts)
+etrade-cli orders place-equity abc123 AAPL --buy 100 --limit 175.00 --yes
+```
+
+**Interactive Flow:**
+```
+$ etrade-cli orders place-equity abc123 AAPL --buy 100 --limit 150.00
+
+Order Preview
+─────────────────────────────────────────
+Symbol:      AAPL
+Action:      BUY 100 shares
+Type:        LIMIT @ $150.00
+Term:        Good for Day
+Session:     Regular
+
+Estimated Costs
+─────────────────────────────────────────
+Order Value:     $15,000.00
+Commission:      $0.00
+Total:           $15,000.00
+
+Place this order? [y/N]: y
+
+✓ Order placed successfully
+  Order ID: 12345
+  Order #: 67890
+```
+
+### orders place-option
+
+Place an option order with confirmation.
+
+```bash
+etrade-cli orders place-option ACCOUNT_ID SYMBOL [OPTIONS]
+
+Arguments:
+  ACCOUNT_ID  Account ID key
+  SYMBOL      Underlying stock symbol (e.g., AAPL)
+
+Contract Options (all required):
+  --expiry DATE       Expiration date (YYYY-MM-DD)
+  --strike FLOAT      Strike price
+  --call              Call option
+  --put               Put option
+  (exactly one of --call or --put required)
+
+Action Options (exactly one required):
+  --buy-open INT      Buy to open quantity
+  --sell-open INT     Sell to open quantity
+  --buy-close INT     Buy to close quantity
+  --sell-close INT    Sell to close quantity
+
+Price Options (default: market order):
+  --limit FLOAT       Limit price
+  --stop FLOAT        Stop price
+  (use both for stop-limit)
+
+Term Options (default: good for day):
+  --gtc               Good until cancel
+  --ioc               Immediate or cancel
+  --fok               Fill or kill
+
+Other Options:
+  --extended          Extended hours session
+  --all-or-none       All or none flag
+  --yes, -y           Skip confirmation prompt
+```
+
+**Examples:**
+```bash
+# Buy 5 call contracts
+etrade-cli orders place-option abc123 AAPL --expiry 2025-01-17 --strike 150 --call --buy-open 5 --limit 2.50
+
+# Sell to close put position
+etrade-cli orders place-option abc123 AAPL --expiry 2025-01-17 --strike 145 --put --sell-close 10 --limit 1.00
+```
+
+### orders preview-equity
+
+Preview an equity order without placing it. Same options as `place-equity` except `--yes`.
+
+```bash
+etrade-cli orders preview-equity ACCOUNT_ID SYMBOL [OPTIONS]
+```
+
+**Example:**
+```bash
+# Dry run - see costs without placing
+etrade-cli orders preview-equity abc123 AAPL --buy 100 --limit 150.00
+```
+
+### orders preview-option
+
+Preview an option order without placing it. Same options as `place-option` except `--yes`.
+
+```bash
+etrade-cli orders preview-option ACCOUNT_ID SYMBOL [OPTIONS]
+```
+
+**Example:**
+```bash
+# Dry run - see costs without placing
+etrade-cli orders preview-option abc123 AAPL --expiry 2025-01-17 --strike 150 --call --buy-open 5 --limit 2.50
+```
 
 ### orders list
 

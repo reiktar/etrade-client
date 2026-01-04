@@ -1,6 +1,6 @@
 """Market Data API endpoints."""
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.market import OptionChain, OptionExpireDate, QuoteResponse
@@ -19,7 +19,9 @@ class MarketAPI(BaseAPI):
         self,
         symbols: list[str],
         *,
-        detail_flag: str = "ALL",  # "ALL", "FUNDAMENTAL", "INTRADAY", "OPTIONS", "WEEK_52", "MF_DETAIL"
+        detail_flag: Literal[
+            "ALL", "FUNDAMENTAL", "INTRADAY", "OPTIONS", "WEEK_52", "MF_DETAIL"
+        ] = "ALL",
         require_earnings_date: bool = False,
         skip_mini_options: bool = True,
     ) -> QuoteResponse:
@@ -58,9 +60,9 @@ class MarketAPI(BaseAPI):
         no_of_strikes: int | None = None,
         include_weekly: bool = True,
         skip_adjusted: bool = True,
-        option_category: str = "STANDARD",  # "STANDARD", "ALL", "MINI"
-        chain_type: str = "CALLPUT",  # "CALL", "PUT", "CALLPUT"
-        price_type: str = "ATNM",  # "ATNM", "ALL"
+        option_category: Literal["STANDARD", "ALL", "MINI"] = "STANDARD",
+        chain_type: Literal["CALL", "PUT", "CALLPUT"] = "CALLPUT",
+        price_type: Literal["ATNM", "ALL"] = "ATNM",
     ) -> OptionChain:
         """Get options chain for a symbol.
 
@@ -101,7 +103,7 @@ class MarketAPI(BaseAPI):
         self,
         symbol: str,
         *,
-        expiry_type: str | None = None,  # "ALL", "MONTHLY", "WEEKLY"
+        expiry_type: Literal["ALL", "MONTHLY", "WEEKLY"] | None = None,
     ) -> list[OptionExpireDate]:
         """Get available option expiration dates for a symbol.
 

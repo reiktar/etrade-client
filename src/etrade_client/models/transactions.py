@@ -215,9 +215,7 @@ class TransactionBase(BaseModel):
 class BoughtTransaction(TransactionBase):
     """Transaction type: Bought"""
 
-    transaction_type: Literal["Bought"] = Field(
-        default="Bought", alias="transactionType"
-    )
+    transaction_type: Literal["Bought"] = Field(default="Bought", alias="transactionType")
     brokerage: BrokerageWithProduct = Field(alias="Brokerage")
 
     details_uri: str = Field(alias="detailsURI")
@@ -239,9 +237,7 @@ class CashInLieuTransaction(TransactionBase):
 class DividendTransaction(TransactionBase):
     """Transaction type: Dividend"""
 
-    transaction_type: Literal["Dividend"] = Field(
-        default="Dividend", alias="transactionType"
-    )
+    transaction_type: Literal["Dividend"] = Field(default="Dividend", alias="transactionType")
     brokerage: BrokerageWithProduct = Field(alias="Brokerage")
 
     details_uri: str = Field(alias="detailsURI")
@@ -343,9 +339,7 @@ class PosTransaction(TransactionBase):
 class ServiceFeeTransaction(TransactionBase):
     """Transaction type: Service Fee"""
 
-    transaction_type: Literal["Service Fee"] = Field(
-        default="Service Fee", alias="transactionType"
-    )
+    transaction_type: Literal["Service Fee"] = Field(default="Service Fee", alias="transactionType")
     brokerage: BrokerageWithoutProduct = Field(alias="Brokerage")
 
     details_uri: str = Field(alias="detailsURI")
@@ -365,9 +359,7 @@ class SoldTransaction(TransactionBase):
 class TransferTransaction(TransactionBase):
     """Transaction type: Transfer"""
 
-    transaction_type: Literal["Transfer"] = Field(
-        default="Transfer", alias="transactionType"
-    )
+    transaction_type: Literal["Transfer"] = Field(default="Transfer", alias="transactionType")
     brokerage: BrokerageWithoutProduct = Field(alias="Brokerage")
 
     details_uri: str | None = Field(default=None, alias="detailsURI")
@@ -400,22 +392,24 @@ class GenericTransaction(TransactionBase):
 
 
 # Known transaction type values that map to specific model classes
-_KNOWN_TRANSACTION_TYPES = frozenset({
-    "Bill Payment",
-    "Bought",
-    "Cash in Lieu",
-    "Dividend",
-    "Exchange Delivered Out",
-    "Exchange Received In",
-    "Fee",
-    "Funds Received",
-    "Interest Income",
-    "Margin Interest",
-    "POS",
-    "Service Fee",
-    "Sold",
-    "Transfer",
-})
+_KNOWN_TRANSACTION_TYPES = frozenset(
+    {
+        "Bill Payment",
+        "Bought",
+        "Cash in Lieu",
+        "Dividend",
+        "Exchange Delivered Out",
+        "Exchange Received In",
+        "Fee",
+        "Funds Received",
+        "Interest Income",
+        "Margin Interest",
+        "POS",
+        "Service Fee",
+        "Sold",
+        "Transfer",
+    }
+)
 
 
 def _get_transaction_discriminator(v: Any) -> str:
@@ -433,7 +427,21 @@ def _get_transaction_discriminator(v: Any) -> str:
 
 # Discriminated union of all transaction types
 Transaction = Annotated[
-    Annotated[BillPaymentTransaction, Tag("Bill Payment")] | Annotated[BoughtTransaction, Tag("Bought")] | Annotated[CashInLieuTransaction, Tag("Cash in Lieu")] | Annotated[DividendTransaction, Tag("Dividend")] | Annotated[ExchangeDeliveredOutTransaction, Tag("Exchange Delivered Out")] | Annotated[ExchangeReceivedInTransaction, Tag("Exchange Received In")] | Annotated[FeeTransaction, Tag("Fee")] | Annotated[FundsReceivedTransaction, Tag("Funds Received")] | Annotated[InterestIncomeTransaction, Tag("Interest Income")] | Annotated[MarginInterestTransaction, Tag("Margin Interest")] | Annotated[PosTransaction, Tag("POS")] | Annotated[ServiceFeeTransaction, Tag("Service Fee")] | Annotated[SoldTransaction, Tag("Sold")] | Annotated[TransferTransaction, Tag("Transfer")] | Annotated[GenericTransaction, Tag("__generic__")],
+    Annotated[BillPaymentTransaction, Tag("Bill Payment")]
+    | Annotated[BoughtTransaction, Tag("Bought")]
+    | Annotated[CashInLieuTransaction, Tag("Cash in Lieu")]
+    | Annotated[DividendTransaction, Tag("Dividend")]
+    | Annotated[ExchangeDeliveredOutTransaction, Tag("Exchange Delivered Out")]
+    | Annotated[ExchangeReceivedInTransaction, Tag("Exchange Received In")]
+    | Annotated[FeeTransaction, Tag("Fee")]
+    | Annotated[FundsReceivedTransaction, Tag("Funds Received")]
+    | Annotated[InterestIncomeTransaction, Tag("Interest Income")]
+    | Annotated[MarginInterestTransaction, Tag("Margin Interest")]
+    | Annotated[PosTransaction, Tag("POS")]
+    | Annotated[ServiceFeeTransaction, Tag("Service Fee")]
+    | Annotated[SoldTransaction, Tag("Sold")]
+    | Annotated[TransferTransaction, Tag("Transfer")]
+    | Annotated[GenericTransaction, Tag("__generic__")],
     Discriminator(_get_transaction_discriminator),
 ]
 

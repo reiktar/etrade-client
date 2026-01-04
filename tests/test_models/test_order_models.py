@@ -269,3 +269,18 @@ class TestPlaceOrderResponse:
 
         assert result.order.order_id == 12345
         assert result.order.order_num == 1
+
+    def test_parses_sandbox_order_ids_format(self) -> None:
+        """Should parse response where orderId is in OrderIds array (sandbox format)."""
+        data = {
+            "PlaceOrderResponse": {
+                "placedTime": 1354532494528,
+                "Order": [{"status": "OPEN"}],
+                "OrderIds": [{"orderId": 529}],
+            }
+        }
+
+        result = PlaceOrderResponse.from_api_response(data)
+
+        assert result.order.order_id == 529
+        assert result.order.order_num is None  # Not present in sandbox

@@ -493,20 +493,24 @@ async def list_dividends(
                     # Use raw numeric amounts for spreadsheet compatibility
                     if reinvested_amt > 0:
                         drip_val = "true" if output == OutputFormat.CSV else "Yes"
-                        dividend_rows.append({
-                            "date": date_str,
-                            "symbol": tx_symbol,
-                            "amount": float(reinvested_amt),
-                            "drip": drip_val,
-                        })
+                        dividend_rows.append(
+                            {
+                                "date": date_str,
+                                "symbol": tx_symbol,
+                                "amount": float(reinvested_amt),
+                                "drip": drip_val,
+                            }
+                        )
                     if cash_amt > 0:
                         drip_val = "false" if output == OutputFormat.CSV else ""
-                        dividend_rows.append({
-                            "date": date_str,
-                            "symbol": tx_symbol,
-                            "amount": float(cash_amt),
-                            "drip": drip_val,
-                        })
+                        dividend_rows.append(
+                            {
+                                "date": date_str,
+                                "symbol": tx_symbol,
+                                "amount": float(cash_amt),
+                                "drip": drip_val,
+                            }
+                        )
                 else:
                     # Standard mode: single row with all columns
                     if output == OutputFormat.CSV:
@@ -541,11 +545,7 @@ async def list_dividends(
                 ):
                     break
 
-            if (
-                not (by_symbol or by_month)
-                and limit is not None
-                and len(dividend_rows) >= limit
-            ):
+            if not (by_symbol or by_month) and limit is not None and len(dividend_rows) >= limit:
                 break
 
         # Output based on grouping mode

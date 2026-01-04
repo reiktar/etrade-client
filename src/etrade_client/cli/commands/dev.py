@@ -1399,9 +1399,7 @@ class AccountAnalyzer:
 
         return balances
 
-    def analyze_types(
-        self, balances: list[dict[str, Any]]
-    ) -> dict[str, list[dict[str, Any]]]:
+    def analyze_types(self, balances: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
         """Group balances by accountType."""
         by_type: dict[str, list[dict[str, Any]]] = {}
         for balance in balances:
@@ -1447,9 +1445,7 @@ class PortfolioAnalyzer:
 
         return positions
 
-    def analyze_types(
-        self, positions: list[dict[str, Any]]
-    ) -> dict[str, list[dict[str, Any]]]:
+    def analyze_types(self, positions: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
         """Group positions by view type."""
         by_type: dict[str, list[dict[str, Any]]] = {}
         for pos in positions:
@@ -1500,9 +1496,7 @@ class OrderAnalyzer:
 
         return order_details
 
-    def analyze_types(
-        self, order_details: list[dict[str, Any]]
-    ) -> dict[str, list[dict[str, Any]]]:
+    def analyze_types(self, order_details: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
         """Group order details by status."""
         by_status: dict[str, list[dict[str, Any]]] = {}
         for detail in order_details:
@@ -1578,9 +1572,7 @@ class QuoteAnalyzer:
 
         return quote_details
 
-    def analyze_types(
-        self, quote_details: list[dict[str, Any]]
-    ) -> dict[str, list[dict[str, Any]]]:
+    def analyze_types(self, quote_details: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
         """Group quote details by detail flag."""
         by_flag: dict[str, list[dict[str, Any]]] = {}
         for detail in quote_details:

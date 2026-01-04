@@ -2,7 +2,8 @@
 
 from collections.abc import AsyncIterator
 from datetime import date
-from typing import Any
+from decimal import Decimal
+from typing import Any, Literal
 
 from etrade_client.api.base import BaseAPI
 from etrade_client.models.accounts import (
@@ -11,6 +12,84 @@ from etrade_client.models.accounts import (
     PortfolioResponse,
 )
 from etrade_client.models.transactions import Transaction, TransactionListResponse
+
+# =============================================================================
+# SANDBOX RESPONSE NORMALIZATION
+# =============================================================================
+#
+# DISCLAIMER: Environment-Aware Response Normalization
+#
+# This module contains normalization logic to handle differences between E*Trade's
+# sandbox and production API responses. We've observed that the sandbox API is
+# missing several fields that are present in production:
+#
+# Missing in Sandbox (as of 2024-12):
+#   - adjPrevClose: Previous close adjusted for splits/dividends (in Position)
+#   - quoteStatus: Quote status indicator (in Quick/Performance/etc views)
+#   - securitySubType: Security sub-type classification
+#
+# DESIGN DECISION: Rather than making these fields optional (which would weaken
+# type safety for production code and potentially hide real bugs), we normalize
+# sandbox responses to include sensible defaults before parsing.
+#
+# This approach:
+#   1. Keeps models strict - production code gets full type safety
+#   2. Allows sandbox testing to work without validation errors
+#   3. Uses conservative defaults (e.g., "DELAYED" for quote status)
+#   4. Is transparent - defaults are clearly synthetic data
+#
+# FUTURE CONSIDERATION: If E*Trade resolves these sandbox inconsistencies, this
+# normalization can be removed. We should revisit this when we have more data
+# about sandbox vs production behavior.
+#
+# =============================================================================
+
+
+def _normalize_portfolio_response_for_sandbox(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize portfolio response to fill in fields missing from sandbox.
+
+    E*Trade's sandbox API returns incomplete data compared to production.
+    This function fills in missing fields with sensible defaults to allow
+    the same strict models to parse both environments.
+
+    Args:
+        data: Raw API response from portfolio endpoint
+
+    Returns:
+        Normalized response with missing sandbox fields filled in
+    """
+    portfolio_response = data.get("PortfolioResponse", {})
+    account_portfolios = portfolio_response.get("AccountPortfolio", [])
+
+    if isinstance(account_portfolios, dict):
+        account_portfolios = [account_portfolios]
+
+    for account_portfolio in account_portfolios:
+        position_list = account_portfolio.get("Position", [])
+        if isinstance(position_list, dict):
+            position_list = [position_list]
+
+        for position in position_list:
+            # Fill in adjPrevClose if missing
+            # Use lastTrade from Quick view as reasonable proxy
+            if "adjPrevClose" not in position:
+                quick = position.get("Quick", {})
+                last_trade = quick.get("lastTrade")
+                if last_trade is not None:
+                    position["adjPrevClose"] = last_trade
+                else:
+                    # Fallback to 0 if no price data available
+                    position["adjPrevClose"] = Decimal("0")
+
+            # Fill in quoteStatus in all view types if missing
+            # Use "DELAYED" as conservative default for sandbox
+            view_keys = ["Quick", "Performance", "Fundamental", "Complete"]
+            for view_key in view_keys:
+                view_data = position.get(view_key)
+                if view_data is not None and "quoteStatus" not in view_data:
+                    view_data["quoteStatus"] = "DELAYED"
+
+    return data
 
 
 class AccountsAPI(BaseAPI):
@@ -61,11 +140,11 @@ class AccountsAPI(BaseAPI):
         *,
         count: int | None = None,
         sort_by: str | None = None,
-        sort_order: str | None = None,  # "ASC" or "DESC"
-        market_session: str | None = None,  # "REGULAR" or "EXTENDED"
+        sort_order: Literal["ASC", "DESC"] | None = None,
+        market_session: Literal["REGULAR", "EXTENDED"] | None = None,
         totals_required: bool = True,
         lots_required: bool = False,
-        view: str = "QUICK",  # "PERFORMANCE", "FUNDAMENTAL", "OPTIONSWATCH", "QUICK", "COMPLETE"
+        view: Literal["QUICK", "PERFORMANCE", "FUNDAMENTAL", "OPTIONSWATCH", "COMPLETE"] = "QUICK",
     ) -> PortfolioResponse:
         """Get account portfolio/positions.
 
@@ -73,8 +152,8 @@ class AccountsAPI(BaseAPI):
             account_id_key: The account ID key
             count: Number of positions to return
             sort_by: Field to sort by
-            sort_order: Sort direction ("ASC" or "DESC")
-            market_session: Market session ("REGULAR" or "EXTENDED")
+            sort_order: Sort direction
+            market_session: Market session
             totals_required: Include totals in response
             lots_required: Include lot details
             view: View type for position data
@@ -97,6 +176,12 @@ class AccountsAPI(BaseAPI):
             params["marketSession"] = market_session
 
         data = await self._get(f"/accounts/{account_id_key}/portfolio.json", params=params)
+
+        # Normalize sandbox responses to fill in missing fields
+        # See module docstring for full rationale
+        if self.config.sandbox:
+            data = _normalize_portfolio_response_for_sandbox(data)
+
         return PortfolioResponse.from_api_response(data, account_id_key)
 
     async def list_transactions(
@@ -105,7 +190,7 @@ class AccountsAPI(BaseAPI):
         *,
         start_date: date | None = None,
         end_date: date | None = None,
-        sort_order: str = "DESC",
+        sort_order: Literal["ASC", "DESC"] = "DESC",
         marker: str | None = None,
         count: int = 50,
     ) -> TransactionListResponse:
@@ -115,7 +200,7 @@ class AccountsAPI(BaseAPI):
             account_id_key: The account ID key
             start_date: Start date for transaction range
             end_date: End date for transaction range
-            sort_order: Sort order ("ASC" or "DESC", default: DESC)
+            sort_order: Sort order (default: DESC)
             marker: Pagination marker from previous response
             count: Number of transactions to return (max 50)
 
@@ -143,7 +228,7 @@ class AccountsAPI(BaseAPI):
         *,
         start_date: date | None = None,
         end_date: date | None = None,
-        sort_order: str = "DESC",
+        sort_order: Literal["ASC", "DESC"] = "DESC",
         count: int = 50,
     ) -> AsyncIterator[TransactionListResponse]:
         """Internal: iterate over transaction pages.
@@ -172,7 +257,7 @@ class AccountsAPI(BaseAPI):
         *,
         start_date: date | None = None,
         end_date: date | None = None,
-        sort_order: str = "DESC",
+        sort_order: Literal["ASC", "DESC"] = "DESC",
         count: int = 50,
         limit: int | None = None,
     ) -> AsyncIterator[Transaction]:
@@ -189,7 +274,7 @@ class AccountsAPI(BaseAPI):
             account_id_key: The account ID key
             start_date: Start date for transaction range
             end_date: End date for transaction range
-            sort_order: Sort order ("ASC" or "DESC", default: DESC)
+            sort_order: Sort order (default: DESC)
             count: Page size for API calls (max 50)
             limit: Maximum transactions to yield (None = unlimited)
 

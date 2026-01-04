@@ -286,8 +286,16 @@ class OrderPreview(BaseModel):
 
     @property
     def preview_id_values(self) -> list[int]:
-        """Get list of preview ID values for placing order."""
+        """Get list of preview ID values."""
         return [p.preview_id for p in self.preview_ids]
+
+    @property
+    def preview_ids_for_placement(self) -> list[dict[str, int]]:
+        """Get preview IDs in the format required for place_order API.
+
+        Returns list of dicts like [{"previewId": 123}, ...]
+        """
+        return [{"previewId": p.preview_id} for p in self.preview_ids]
 
 
 class OrderPreviewResponse(BaseModel):
@@ -306,8 +314,8 @@ class PlacedOrder(BaseModel):
     """Placed order confirmation."""
 
     order_id: int = Field(alias="orderId")
-    placed_time: datetime | None = Field(default=None, alias="placedTime")
-    order_num: int = Field(alias="orderNum")
+    placed_time: datetime | int | None = Field(default=None, alias="placedTime")
+    order_num: int | None = Field(default=None, alias="orderNum")  # Not present in sandbox
     order: list[dict[str, Any]] = Field(default_factory=list, alias="Order")
 
     model_config = {"populate_by_name": True}
@@ -322,4 +330,17 @@ class PlaceOrderResponse(BaseModel):
     def from_api_response(cls, data: dict[str, Any]) -> PlaceOrderResponse:
         """Parse from raw API response."""
         order_data = data.get("PlaceOrderResponse", {})
+
+        # E*Trade returns orderId in different locations depending on environment:
+        # - Production: orderId at top level of PlaceOrderResponse
+        # - Sandbox: orderId in OrderIds[0].orderId
+        if "orderId" not in order_data:
+            # Check OrderIds array (sandbox format)
+            order_ids = order_data.get("OrderIds", [])
+            if order_ids and isinstance(order_ids, list) and len(order_ids) > 0:
+                order_data = {
+                    **order_data,
+                    "orderId": order_ids[0].get("orderId"),
+                }
+
         return cls(order=PlacedOrder.model_validate(order_data))

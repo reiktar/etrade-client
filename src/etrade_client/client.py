@@ -1,6 +1,5 @@
 """Main E*Trade client."""
 
-
 from typing import TYPE_CHECKING
 
 import httpx

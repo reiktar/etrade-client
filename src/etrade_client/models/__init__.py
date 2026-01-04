@@ -9,17 +9,17 @@ from etrade_client.models.accounts import (
     BalanceResponse,
     # Portfolio quote models
     CompleteQuote,
-    FundamentalQuote,
-    PerformanceQuote,
-    QuickQuote,
     # Portfolio position models
     CompleteViewPosition,
+    FundamentalQuote,
     FundamentalViewPosition,
+    PerformanceQuote,
     PerformanceViewPosition,
     PortfolioPosition,
     PortfolioPositionBase,
     PortfolioResponse,
     PositionType,
+    QuickQuote,
     QuickViewPosition,
 )
 from etrade_client.models.alerts import (
@@ -39,17 +39,17 @@ from etrade_client.models.market import (
     ExtendedHourQuoteDetail,
     FundamentalQuoteDetail,
     IntradayQuoteDetail,
-    OptionsQuoteDetail,
-    Week52QuoteDetail,
     # Option chain models
     OptionChain,
     OptionExpireDate,
     OptionExpiryType,
+    OptionsQuoteDetail,
     OptionType,
     # Quote wrapper and response
     Quote,
     QuoteResponse,
     QuoteStatus,
+    Week52QuoteDetail,
 )
 from etrade_client.models.orders import (
     CallPut,
@@ -67,20 +67,12 @@ from etrade_client.models.orders import (
     SecurityType,
 )
 from etrade_client.models.transactions import (
-    # Response model
-    Transaction,
-    TransactionListResponse,
-    # Enum
-    TransactionType,
-    # Base classes
-    TransactionBase,
-    Product,
-    Brokerage,
-    BrokerageWithProduct,
-    BrokerageWithoutProduct,
     # Transaction subclasses
     BillPaymentTransaction,
     BoughtTransaction,
+    Brokerage,
+    BrokerageWithoutProduct,
+    BrokerageWithProduct,
     CashInLieuTransaction,
     DividendTransaction,
     ExchangeDeliveredOutTransaction,
@@ -91,8 +83,16 @@ from etrade_client.models.transactions import (
     InterestIncomeTransaction,
     MarginInterestTransaction,
     PosTransaction,
+    Product,
     ServiceFeeTransaction,
     SoldTransaction,
+    # Response model
+    Transaction,
+    # Base classes
+    TransactionBase,
+    TransactionListResponse,
+    # Enum
+    TransactionType,
     TransferTransaction,
 )
 

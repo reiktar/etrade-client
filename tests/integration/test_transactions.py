@@ -152,9 +152,7 @@ class TestTransactionModelValidation:
             # symbol may be None for some transaction types
             _ = parsed.symbol
 
-    def test_dividend_transactions_have_product(
-        self, collected_transactions: list[dict]
-    ) -> None:
+    def test_dividend_transactions_have_product(self, collected_transactions: list[dict]) -> None:
         """DividendTransaction should have brokerage with product info."""
         adapter = TypeAdapter(Transaction)
         dividend_count = 0
@@ -172,9 +170,7 @@ class TestTransactionModelValidation:
         if dividend_count == 0:
             pytest.skip("No dividend transactions in collected data")
 
-    def test_bought_transactions_have_product(
-        self, collected_transactions: list[dict]
-    ) -> None:
+    def test_bought_transactions_have_product(self, collected_transactions: list[dict]) -> None:
         """BoughtTransaction should have brokerage with product info."""
         adapter = TypeAdapter(Transaction)
         bought_count = 0

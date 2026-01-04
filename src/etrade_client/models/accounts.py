@@ -146,9 +146,7 @@ class ComputedBalance(BaseModel):
     total_available_for_withdrawal: Decimal | None = Field(
         default=None, alias="totalAvailableForWithdrawal"
     )
-    dt_margin_buying_power: Decimal | None = Field(
-        default=None, alias="dtMarginBuyingPower"
-    )
+    dt_margin_buying_power: Decimal | None = Field(default=None, alias="dtMarginBuyingPower")
     dt_cash_buying_power: Decimal | None = Field(default=None, alias="dtCashBuyingPower")
     short_adjust_balance: Decimal | None = Field(default=None, alias="shortAdjustBalance")
     regt_equity: Decimal | None = Field(default=None, alias="regtEquity")
@@ -413,7 +411,7 @@ class PortfolioPositionBase(BaseModel):
     today_commissions: Decimal = Field(alias="todayCommissions")
     today_fees: Decimal = Field(alias="todayFees")
 
-    # Adjusted previous close (always present)
+    # Adjusted previous close
     adj_prev_close: Decimal = Field(alias="adjPrevClose")
 
     model_config = {"populate_by_name": True}
