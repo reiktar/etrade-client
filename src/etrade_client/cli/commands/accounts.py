@@ -2,9 +2,11 @@
 
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 import typer
 
+from etrade_client.api.types import PortfolioView
 from etrade_client.cli.async_runner import async_command
 from etrade_client.cli.client_factory import get_client
 from etrade_client.cli.config import CLIConfig, OutputFormat
@@ -132,12 +134,20 @@ async def get_portfolio(
     """Get account portfolio positions."""
     config: CLIConfig = ctx.obj
 
+    # Validate and cast view
+    view_upper = view.upper()
+    valid_views = ("QUICK", "PERFORMANCE", "FUNDAMENTAL", "OPTIONSWATCH", "COMPLETE")
+    if view_upper not in valid_views:
+        print_error(f"View must be one of: {', '.join(valid_views)}")
+        raise typer.Exit(1)
+    view_literal = cast("PortfolioView", view_upper)
+
     async with get_client(config) as client:
         if not client.is_authenticated:
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
-        portfolio = await client.accounts.get_portfolio(account_id, view=view.upper())
+        portfolio = await client.accounts.get_portfolio(account_id, view=view_literal)
         if not portfolio.positions:
             format_output([], output, title="Portfolio Positions")
             return

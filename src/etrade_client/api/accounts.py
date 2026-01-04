@@ -3,9 +3,10 @@
 from collections.abc import AsyncIterator
 from datetime import date
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any
 
 from etrade_client.api.base import BaseAPI
+from etrade_client.api.types import MarketSession, PortfolioView, SortOrder
 from etrade_client.models.accounts import (
     AccountListResponse,
     BalanceResponse,
@@ -140,11 +141,11 @@ class AccountsAPI(BaseAPI):
         *,
         count: int | None = None,
         sort_by: str | None = None,
-        sort_order: Literal["ASC", "DESC"] | None = None,
-        market_session: Literal["REGULAR", "EXTENDED"] | None = None,
+        sort_order: SortOrder | None = None,
+        market_session: MarketSession | None = None,
         totals_required: bool = True,
         lots_required: bool = False,
-        view: Literal["QUICK", "PERFORMANCE", "FUNDAMENTAL", "OPTIONSWATCH", "COMPLETE"] = "QUICK",
+        view: PortfolioView = "QUICK",
     ) -> PortfolioResponse:
         """Get account portfolio/positions.
 
@@ -190,7 +191,7 @@ class AccountsAPI(BaseAPI):
         *,
         start_date: date | None = None,
         end_date: date | None = None,
-        sort_order: Literal["ASC", "DESC"] = "DESC",
+        sort_order: SortOrder = "DESC",
         marker: str | None = None,
         count: int = 50,
     ) -> TransactionListResponse:
@@ -228,7 +229,7 @@ class AccountsAPI(BaseAPI):
         *,
         start_date: date | None = None,
         end_date: date | None = None,
-        sort_order: Literal["ASC", "DESC"] = "DESC",
+        sort_order: SortOrder = "DESC",
         count: int = 50,
     ) -> AsyncIterator[TransactionListResponse]:
         """Internal: iterate over transaction pages.
@@ -257,7 +258,7 @@ class AccountsAPI(BaseAPI):
         *,
         start_date: date | None = None,
         end_date: date | None = None,
-        sort_order: Literal["ASC", "DESC"] = "DESC",
+        sort_order: SortOrder = "DESC",
         count: int = 50,
         limit: int | None = None,
     ) -> AsyncIterator[Transaction]:

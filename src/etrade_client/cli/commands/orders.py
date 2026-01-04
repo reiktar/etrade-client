@@ -2,13 +2,14 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from etrade_client.api.types import OrderStatus
 from etrade_client.builders import EquityOrderBuilder, OptionOrderBuilder
 from etrade_client.cli.async_runner import async_command
 from etrade_client.cli.client_factory import get_client
@@ -177,11 +178,29 @@ async def list_orders(
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
+        # Validate and cast status if provided
+        status_literal: OrderStatus | None = None
+        if status:
+            status_upper = status.upper()
+            valid_statuses = (
+                "OPEN",
+                "EXECUTED",
+                "CANCELLED",
+                "INDIVIDUAL_FILLS",
+                "CANCEL_REQUESTED",
+                "EXPIRED",
+                "REJECTED",
+            )
+            if status_upper not in valid_statuses:
+                print_error(f"Status must be one of: {', '.join(valid_statuses)}")
+                raise typer.Exit(1)
+            status_literal = cast("OrderStatus", status_upper)
+
         # Collect orders using pagination iterator
         orders = []
         async for order in client.orders.iter_orders(
             account_id,
-            status=status.upper() if status else None,
+            status=status_literal,
             symbol=symbol.upper() if symbol else None,
             from_date=start_date,
             to_date=end_date,

@@ -1,9 +1,11 @@
 """Transactions commands."""
 
 from datetime import date
+from typing import cast
 
 import typer
 
+from etrade_client.api.types import SortOrder
 from etrade_client.cli.async_runner import async_command
 from etrade_client.cli.client_factory import get_client
 from etrade_client.cli.config import CLIConfig, OutputFormat
@@ -109,6 +111,13 @@ async def list_transactions(
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
+        # Validate and cast sort order
+        sort_upper = sort.upper()
+        if sort_upper not in ("ASC", "DESC"):
+            print_error("Sort order must be ASC or DESC.")
+            raise typer.Exit(1)
+        sort_order = cast("SortOrder", sort_upper)
+
         # Collect transactions up to limit
         transactions = []
         count = 0
@@ -116,7 +125,7 @@ async def list_transactions(
             account_id,
             start_date=start_date,
             end_date=end_date,
-            sort_order=sort.upper(),
+            sort_order=sort_order,
             limit=None,  # We filter ourselves when symbol is specified
         ):
             # Filter by symbol if specified

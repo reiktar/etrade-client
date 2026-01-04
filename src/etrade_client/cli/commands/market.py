@@ -1,9 +1,11 @@
 """Market data commands."""
 
 from datetime import date
+from typing import cast
 
 import typer
 
+from etrade_client.api.types import ChainType, ExpiryType, QuoteDetailFlag
 from etrade_client.cli.async_runner import async_command
 from etrade_client.cli.client_factory import get_client
 from etrade_client.cli.config import CLIConfig, OutputFormat
@@ -40,12 +42,20 @@ async def get_quote(
         print_error("Maximum 25 symbols per request.")
         raise typer.Exit(1)
 
+    # Validate and cast detail flag
+    detail_upper = detail.upper()
+    valid_details = ("ALL", "FUNDAMENTAL", "INTRADAY", "OPTIONS", "WEEK_52", "MF_DETAIL")
+    if detail_upper not in valid_details:
+        print_error(f"Detail must be one of: {', '.join(valid_details)}")
+        raise typer.Exit(1)
+    detail_literal = cast("QuoteDetailFlag", detail_upper)
+
     async with get_client(config) as client:
         if not client.is_authenticated:
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
-        response = await client.market.get_quotes(symbols, detail_flag=detail.upper())
+        response = await client.market.get_quotes(symbols, detail_flag=detail_literal)
 
         if not response.quotes:
             format_output([], output, title="Quotes")
@@ -147,9 +157,18 @@ async def options_dates(
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
+        # Validate and cast expiry type if provided
+        expiry_type_literal: ExpiryType | None = None
+        if expiry_type:
+            expiry_type_upper = expiry_type.upper()
+            if expiry_type_upper not in ("ALL", "MONTHLY", "WEEKLY"):
+                print_error("Expiry type must be ALL, MONTHLY, or WEEKLY.")
+                raise typer.Exit(1)
+            expiry_type_literal = cast("ExpiryType", expiry_type_upper)
+
         dates = await client.market.get_option_expire_dates(
             symbol,
-            expiry_type=expiry_type.upper() if expiry_type else None,
+            expiry_type=expiry_type_literal,
         )
 
         # Format dates
@@ -209,10 +228,17 @@ async def options_chain(
             print_error("Not authenticated. Run 'etrade-cli auth login' first.")
             raise typer.Exit(1)
 
+        # Validate and cast chain type
+        chain_type_upper = chain_type.upper()
+        if chain_type_upper not in ("CALL", "PUT", "CALLPUT"):
+            print_error("Chain type must be CALL, PUT, or CALLPUT.")
+            raise typer.Exit(1)
+        chain_type_literal = cast("ChainType", chain_type_upper)
+
         chain = await client.market.get_option_chains(
             symbol,
             expiry_date,
-            chain_type=chain_type.upper(),
+            chain_type=chain_type_literal,
             no_of_strikes=strikes,
         )
 

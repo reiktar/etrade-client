@@ -2,9 +2,18 @@
 
 from collections.abc import AsyncIterator
 from datetime import date
-from typing import Any, Literal
+from typing import Any
 
 from etrade_client.api.base import BaseAPI
+from etrade_client.api.types import (
+    MarketSession,
+    OrderAction,
+    OrderStatus,
+    OrderTerm,
+    PriceType,
+    SecurityType,
+    TransactionType,
+)
 from etrade_client.exceptions import ETradeValidationError
 from etrade_client.models.orders import (
     Order,
@@ -27,22 +36,13 @@ class OrdersAPI(BaseAPI):
         *,
         marker: str | None = None,
         count: int | None = None,
-        status: Literal[
-            "OPEN",
-            "EXECUTED",
-            "CANCELLED",
-            "INDIVIDUAL_FILLS",
-            "CANCEL_REQUESTED",
-            "EXPIRED",
-            "REJECTED",
-        ]
-        | None = None,
+        status: OrderStatus | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
         symbol: str | None = None,
-        security_type: Literal["EQ", "OPTN", "MF", "MMF"] | None = None,
-        transaction_type: Literal["BUY", "SELL", "SHORT", "BUY_TO_COVER"] | None = None,
-        market_session: Literal["REGULAR", "EXTENDED"] | None = None,
+        security_type: SecurityType | None = None,
+        transaction_type: TransactionType | None = None,
+        market_session: MarketSession | None = None,
     ) -> OrderListResponse:
         """List orders for an account.
 
@@ -88,13 +88,13 @@ class OrdersAPI(BaseAPI):
         account_id_key: str,
         *,
         count: int = 100,
-        status: str | None = None,
+        status: OrderStatus | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
         symbol: str | None = None,
-        security_type: str | None = None,
-        transaction_type: str | None = None,
-        market_session: str | None = None,
+        security_type: SecurityType | None = None,
+        transaction_type: TransactionType | None = None,
+        market_session: MarketSession | None = None,
     ) -> AsyncIterator[OrderListResponse]:
         """Internal: iterate over order pages.
 
@@ -125,13 +125,13 @@ class OrdersAPI(BaseAPI):
         account_id_key: str,
         *,
         count: int = 100,
-        status: str | None = None,
+        status: OrderStatus | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
         symbol: str | None = None,
-        security_type: str | None = None,
-        transaction_type: str | None = None,
-        market_session: str | None = None,
+        security_type: SecurityType | None = None,
+        transaction_type: TransactionType | None = None,
+        market_session: MarketSession | None = None,
         limit: int | None = None,
     ) -> AsyncIterator[Order]:
         """Iterate over orders matching the filters.
@@ -314,15 +314,13 @@ class OrdersAPI(BaseAPI):
     def build_equity_order(
         *,
         symbol: str,
-        action: Literal["BUY", "SELL", "BUY_TO_COVER", "SELL_SHORT"],
+        action: OrderAction,
         quantity: int,
-        order_type: Literal["MARKET", "LIMIT", "STOP", "STOP_LIMIT"] = "MARKET",
+        order_type: PriceType = "MARKET",
         limit_price: float | None = None,
         stop_price: float | None = None,
-        order_term: Literal[
-            "GOOD_FOR_DAY", "GOOD_UNTIL_CANCEL", "IMMEDIATE_OR_CANCEL", "FILL_OR_KILL"
-        ] = "GOOD_FOR_DAY",
-        market_session: Literal["REGULAR", "EXTENDED"] = "REGULAR",
+        order_term: OrderTerm = "GOOD_FOR_DAY",
+        market_session: MarketSession = "REGULAR",
         all_or_none: bool = False,
         client_order_id: str | None = None,
     ) -> dict[str, Any]:
