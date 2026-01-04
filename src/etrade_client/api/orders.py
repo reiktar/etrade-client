@@ -1,19 +1,8 @@
 """Orders API endpoints."""
 
-from collections.abc import AsyncIterator
-from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from etrade_client.api.base import BaseAPI
-from etrade_client.api.types import (
-    MarketSession,
-    OrderAction,
-    OrderStatus,
-    OrderTerm,
-    PriceType,
-    SecurityType,
-    TransactionType,
-)
 from etrade_client.exceptions import ETradeValidationError
 from etrade_client.models.orders import (
     Order,
@@ -21,6 +10,20 @@ from etrade_client.models.orders import (
     OrderPreviewResponse,
     PlaceOrderResponse,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+    from datetime import date
+
+    from etrade_client.api.types import (
+        MarketSession,
+        OrderAction,
+        OrderStatus,
+        OrderTerm,
+        PriceType,
+        SecurityType,
+        TransactionType,
+    )
 
 
 class OrdersAPI(BaseAPI):

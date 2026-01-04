@@ -13,7 +13,7 @@ from __future__ import annotations
 import contextlib
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 from pydantic import BaseModel
@@ -229,7 +229,7 @@ class ETradeResponseNormalizer:
     """
 
     # Maps array container keys to the field used for matching individual items
-    ARRAY_CONTAINERS: dict[str, str | None] = {
+    ARRAY_CONTAINERS: ClassVar[dict[str, str | None]] = {
         "QuoteData": "symbol",
         "Account": "accountId",
         "Position": "positionId",
@@ -241,14 +241,14 @@ class ETradeResponseNormalizer:
 
     # Maps intermediate wrapper keys to the array container they hold
     # E.g., "Accounts" contains the "Account" array
-    WRAPPER_TO_CONTAINER: dict[str, str] = {
+    WRAPPER_TO_CONTAINER: ClassVar[dict[str, str]] = {
         "Accounts": "Account",
         "AccountPortfolio": "Position",
     }
 
     # Keys that are siblings to the model array but not part of the model
     # These are metadata/summary fields at the wrapper level
-    STRUCTURAL_KEYS: set[str] = {
+    STRUCTURAL_KEYS: ClassVar[set[str]] = {
         "Accounts",
         "AccountPortfolio",
         "Totals",

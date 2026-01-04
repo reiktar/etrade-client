@@ -1,11 +1,15 @@
 """Order-related models."""
 
-from datetime import datetime
-from decimal import Decimal
+from __future__ import annotations
+
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from decimal import Decimal
 
 
 class OrderAction(StrEnum):

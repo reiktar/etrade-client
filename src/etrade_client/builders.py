@@ -173,9 +173,10 @@ class EquityOrderBuilder:
             raise ValueError("Limit price required for limit orders")
         if self._price_type == PriceType.STOP and self._stop_price is None:
             raise ValueError("Stop price required for stop orders")
-        if self._price_type == PriceType.STOP_LIMIT:
-            if self._stop_price is None or self._limit_price is None:
-                raise ValueError("Both stop and limit prices required for stop-limit orders")
+        if self._price_type == PriceType.STOP_LIMIT and (
+            self._stop_price is None or self._limit_price is None
+        ):
+            raise ValueError("Both stop and limit prices required for stop-limit orders")
 
         instrument = {
             "Product": {
@@ -379,9 +380,10 @@ class OptionOrderBuilder:
             raise ValueError("Limit price required for limit orders")
         if self._price_type == PriceType.STOP and self._stop_price is None:
             raise ValueError("Stop price required for stop orders")
-        if self._price_type == PriceType.STOP_LIMIT:
-            if self._stop_price is None or self._limit_price is None:
-                raise ValueError("Both stop and limit prices required for stop-limit orders")
+        if self._price_type == PriceType.STOP_LIMIT and (
+            self._stop_price is None or self._limit_price is None
+        ):
+            raise ValueError("Both stop and limit prices required for stop-limit orders")
 
         option_symbol = self._build_option_symbol()
 

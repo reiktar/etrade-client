@@ -80,7 +80,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-def pytest_sessionstart(session: pytest.Session) -> None:
+def pytest_sessionstart(_session: pytest.Session) -> None:
     """Initialize field analysis collector at session start."""
     global _collector, _presence_analyzer, _endpoint_analyzer
     _collector = FieldAnalysisCollector()
@@ -88,7 +88,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     _endpoint_analyzer = EndpointFieldAnalyzer()
 
 
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+def pytest_sessionfinish(_session: pytest.Session, _exitstatus: int) -> None:
     """Print field analysis summary at session end."""
     if _collector and _collector.has_unknown_fields:
         print("\n")
@@ -226,7 +226,7 @@ def analyze_response(
     """
     if request.node.get_closest_marker("no_field_analysis"):
 
-        def _noop(model_instance: BaseModel, endpoint: str) -> None:
+        def _noop(_model_instance: BaseModel, _endpoint: str) -> None:
             pass
 
         return _noop

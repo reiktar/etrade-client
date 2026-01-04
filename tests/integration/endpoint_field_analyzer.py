@@ -174,7 +174,7 @@ class EndpointFieldAnalyzer:
 
             # Check if it's always present when the endpoint returns it
             always_present_in_endpoints = True
-            for endpoint, (count, total) in presence_info.items():
+            for _endpoint, (count, total) in presence_info.items():
                 if count < total:
                     always_present_in_endpoints = False
                     break
