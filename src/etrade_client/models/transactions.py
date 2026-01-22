@@ -9,7 +9,7 @@ maps directly to the API's `transactionType` value.
 """
 
 from datetime import UTC, datetime
-from decimal import Decimal  # noqa: TC003 - needed at runtime for Pydantic
+from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 

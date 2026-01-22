@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    from datetime import datetime
-    from decimal import Decimal
 
 
 class OrderAction(StrEnum):

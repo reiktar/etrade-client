@@ -1,6 +1,6 @@
 """Account-related models."""
 
-from datetime import datetime  # noqa: TC003
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any
