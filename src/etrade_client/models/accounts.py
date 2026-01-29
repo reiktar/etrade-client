@@ -118,13 +118,13 @@ class RealTimeValues(BaseModel):
 class ComputedBalance(BaseModel):
     """Computed account balance values."""
 
-    # Always present in API responses
-    cash_available_for_investment: Decimal = Field(alias="cashAvailableForInvestment")
-    cash_available_for_withdrawal: Decimal = Field(alias="cashAvailableForWithdrawal")
-    net_cash: Decimal = Field(alias="netCash")
-    cash_balance: Decimal = Field(alias="cashBalance")
-    settled_cash_for_investment: Decimal = Field(alias="settledCashForInvestment")
-    un_settled_cash_for_investment: Decimal = Field(alias="unSettledCashForInvestment")
+    # Usually present in API responses (may be absent during settlement periods)
+    cash_available_for_investment: Decimal | None = Field(default=None, alias="cashAvailableForInvestment")
+    cash_available_for_withdrawal: Decimal | None = Field(default=None, alias="cashAvailableForWithdrawal")
+    net_cash: Decimal | None = Field(default=None, alias="netCash")
+    cash_balance: Decimal | None = Field(default=None, alias="cashBalance")
+    settled_cash_for_investment: Decimal | None = Field(default=None, alias="settledCashForInvestment")
+    un_settled_cash_for_investment: Decimal | None = Field(default=None, alias="unSettledCashForInvestment")
 
     # Nested objects - always present in API responses
     open_calls: OpenCalls = Field(alias="OpenCalls")
