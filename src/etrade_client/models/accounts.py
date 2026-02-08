@@ -406,7 +406,7 @@ class PortfolioPositionBase(BaseModel):
     quote_details: str = Field(alias="quoteDetails")
 
     # Today's activity
-    today_quantity: int = Field(alias="todayQuantity")
+    today_quantity: Decimal = Field(alias="todayQuantity")
     today_price_paid: Decimal = Field(alias="todayPricePaid")
     today_commissions: Decimal = Field(alias="todayCommissions")
     today_fees: Decimal = Field(alias="todayFees")
