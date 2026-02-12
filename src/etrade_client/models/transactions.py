@@ -235,10 +235,14 @@ class CashInLieuTransaction(TransactionBase):
 
 
 class DividendTransaction(TransactionBase):
-    """Transaction type: Dividend"""
+    """Transaction type: Dividend
+
+    Some dividends (e.g. money market sweeps) may lack product info,
+    so brokerage accepts either type.
+    """
 
     transaction_type: Literal["Dividend"] = Field(default="Dividend", alias="transactionType")
-    brokerage: BrokerageWithProduct = Field(alias="Brokerage")
+    brokerage: BrokerageWithProduct | BrokerageWithoutProduct = Field(alias="Brokerage")
 
     details_uri: str = Field(alias="detailsURI")
     inst_type: str = Field(alias="instType")
