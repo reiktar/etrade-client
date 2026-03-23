@@ -351,8 +351,8 @@ class CompleteQuote(BaseModel):
     annual_dividend: Decimal = Field(alias="annualDividend")
     dividend: Decimal
     div_yield: Decimal = Field(alias="divYield")
-    div_pay_date: int = Field(alias="divPayDate")
-    ex_dividend_date: int = Field(alias="exDividendDate")
+    div_pay_date: int | None = Field(default=None, alias="divPayDate")
+    ex_dividend_date: int | None = Field(default=None, alias="exDividendDate")
     cusip: str
 
     # Description and status
