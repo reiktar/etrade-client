@@ -261,12 +261,16 @@ class ExchangeReceivedInTransaction(TransactionBase):
 
 
 class InterestIncomeTransaction(TransactionBase):
-    """Transaction type: Interest Income"""
+    """Transaction type: Interest Income
+
+    Some interest income (e.g. cash sweep or money market) may lack product info,
+    so brokerage accepts either type.
+    """
 
     transaction_type: Literal["Interest Income"] = Field(
         default="Interest Income", alias="transactionType"
     )
-    brokerage: BrokerageWithProduct = Field(alias="Brokerage")
+    brokerage: BrokerageWithProduct | BrokerageWithoutProduct = Field(alias="Brokerage")
 
     details_uri: str = Field(alias="detailsURI")
     inst_type: str = Field(alias="instType")
